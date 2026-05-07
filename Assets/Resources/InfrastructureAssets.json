@@ -1,0 +1,34 @@
+{
+  "assets": [
+    {
+      "assetId": "IITK_ROAD_001",
+      "assetName": "Academic Area Road",
+      "assetType": "Road",
+      "latitude": 26.512338,
+      "longitude": 80.232884,
+      "builtBy": "IIT Kanpur Engineering Division",
+      "lastRepaired": "2019",
+      "fundingSource": "Institute Infrastructure Fund"
+    },
+    {
+      "assetId": "IITK_ROAD_002",
+      "assetName": "DJC Access Road",
+      "assetType": "Road",
+      "latitude": 26.510987,
+      "longitude": 80.236221,
+      "builtBy": "CPWD",
+      "lastRepaired": "2021",
+      "fundingSource": "Central Government Grant"
+    },
+    {
+      "assetId": "IITK_ROAD_003",
+      "assetName": "Hall 3–Hall 4 Connector Road",
+      "assetType": "Road",
+      "latitude": 26.514612,
+      "longitude": 80.229745,
+      "builtBy": "IIT Kanpur",
+      "lastRepaired": "2017",
+      "fundingSource": "Alumni Infrastructure Fund"
+    }
+  ]
+}
