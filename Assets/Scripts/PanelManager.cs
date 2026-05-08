@@ -37,6 +37,7 @@ public class PanelManager : MonoBehaviour
         Preview, //Frozen frame shown to user for review
         AwaitingAnalysis, //Dummy loading state for now- CV netween goes here later
         ReviewResult, // This is the phase where the AI result is received - this is where we can have the review panel
+        SubmittingGrievance, //POST to grievance database is happening, submit button is hidden, spinner showing
         Success //This is where submission is confirmed, we can success panel here
     }
 
@@ -47,7 +48,6 @@ public class PanelManager : MonoBehaviour
 
     [Tooltip("Panel shown when no location data available or an error")]
     public GameObject noLocationPanel; 
-
 
     [Tooltip("BG panel for the instructions on the main page")]
     public GameObject infoPanelGameObject;
@@ -110,6 +110,7 @@ public class PanelManager : MonoBehaviour
     [Header("ImageCapture UI Elements - Future Elements")] //these are the things added after SB's CV integration is done 
     [SerializeField] private GameObject reviewResultsPanel; //Placeholder. Leave unassigned for now, later will write from received json analysed data
     [SerializeField] private GameObject successSubmissionPanel; //Placeholder. Leave unassigned for now, later will be the Complaint Lodged success panel
+    [SerializeField] private GameObject submitGrievanceButton; // show in reviewresult, tapped to file the grievance
     
     [Header("Script References")]
     public  DebugOverlayController debugOverlayController; 
@@ -121,12 +122,14 @@ public class PanelManager : MonoBehaviour
     public LoadingCircleAnimation loadingCircleAnimation; //Reference to the loading circle script to trigger animation. 
     public ReportSubmissionManager submissionManager; //Reference to the report submission manager to trigger the report submission flow when SB's CV section is ready
     public CVResultPopulator cvResultPopulator; //Reference to the script that will populate the CV result panel with the data received from SB's CV analysis, this is separate from the PanelPopulator which is specifically for the location data from the JSON
+    public GrievanceSubmissionManager grievanceSubmissionManager; //handles the POST to the grievance database
     #endregion
 
     #region Private State Fields
     private UIState currentState = UIState.Idle;
     private ReportFlowState currentReportFlowState = ReportFlowState.LiveCapture;
     private string currentRoadName = null; //Set when Success condition hit, otherwise remains clear
+    private CVAnalysisResult currentCVResult = null; //Stores the CV result between ReviewResult and the submission
     #endregion
 
     #region Unity Lifecycle Methods
@@ -283,16 +286,32 @@ public class PanelManager : MonoBehaviour
             sharedCameraManager?.SuspendFeed();
             capturedFramePanel.SetActive(true); 
             previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
+             instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
             //This is where we will show the results from the CV analysis 
-            SetImageCaptureInstructionText("AI result received!"); //Placeholder, will replace with real results from the CV analysis later
+            SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint"); //Placeholder, will replace with real results from the CV analysis later
             if (loadingSpinner != null) loadingSpinner.SetActive(false); 
             if(reviewResultsPanel != null) reviewResultsPanel.SetActive(true); //Show the panel with the CV results, this panel will be populated with the actual CV result data once we have that from SB
+            ShowButton(submitGrievanceButton, interactable: true); //Submit button appears once the CV result comes in
+            break;
+
+            case ReportFlowState.SubmittingGrievance:
+            sharedCameraManager?.SuspendFeed();
+            capturedFramePanel.SetActive(true); 
+            previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
+            if (reviewResultsPanel != null) reviewResultsPanel.SetActive(true); //Keep the result visible while submitting
+            instructionpanel.SetActive(true);
+            SetImageCaptureInstructionText("Filing grievance report...");
+            // submitGrievanceButton intentionally NOT shown — HideAllButtons() already hid it
             break;
 
             case ReportFlowState.Success:
             sharedCameraManager?.ResumeFeed();  
             //Placeholder - wire up when submission backend is ready, this is where we will show the complaint lodged successfully
+            instructionpanel.SetActive(true);
             SetImageCaptureInstructionText("Complaint submitted");
+            if (loadingSpinner != null) loadingSpinner.SetActive(false);
+            if (successSubmissionPanel != null) successSubmissionPanel.SetActive(true);
+            ShowButton(backButton, interactable: true); //Show the back button to let user return to main page after seeing success message
             break;
         }
 
@@ -384,6 +403,7 @@ public class PanelManager : MonoBehaviour
 
         if (previewRawImage != null)
         previewRawImage.texture = null;
+        currentCVResult = null; //Discard any previously stored result so stale data cannot be submitted
 
         SetReportFlowState(ReportFlowState.LiveCapture); //Go back to the live capture state to let user try taking the picture again
     }
@@ -406,11 +426,13 @@ public class PanelManager : MonoBehaviour
             snapshot = locationServiceManager.LastLocationSnapshot; 
             roadName = googleMapsServices.ActiveLocationName;
         }
+
         SetReportFlowState(ReportFlowState.AwaitingAnalysis); 
 
         submissionManager.SubmitReport(
             image, snapshot, roadName,
             onSuccess: (CVAnalysisResult result) => {
+            currentCVResult = result; //store so OnSubmitGrievanceButtonPressed can pass it to GrievanceSubmissionManager
             cvResultPopulator.Populate(result);  
             SetReportFlowState(ReportFlowState.ReviewResult);     // fills the panel
             },
@@ -421,6 +443,48 @@ public class PanelManager : MonoBehaviour
             }
         );
 
+    }
+
+    public void OnSubmitGrievanceButtonPressed()
+    {
+        if (grievanceSubmissionManager == null)
+        {
+            debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] GrievanceSubmissionManager is not assigned in the Inspector");
+            return;
+        }
+
+        LocationServiceManager.LocationSnapshot snapshot; 
+        string roadName;
+
+        if (uiTestMode)
+        {
+            snapshot = new LocationServiceManager.LocationSnapshot(26.515430f,80.235020f,5f); //Nursery GPS value
+            roadName = currentRoadName;
+        }
+
+        else{
+            snapshot = locationServiceManager.LastLocationSnapshot; 
+            roadName = googleMapsServices.ActiveLocationName;
+        }
+
+        SetReportFlowState(ReportFlowState.SubmittingGrievance); //Move to the submitting grievance sub-state to show the relevant UI
+
+         grievanceSubmissionManager.SubmitGrievance(
+            currentCVResult,
+            snapshot,
+            roadName,
+            onSuccess: () =>
+            {
+                currentCVResult = null; // clear after successful submission
+                SetReportFlowState(ReportFlowState.Success);
+            },
+            onFailure: (string error) =>
+            {
+                debugOverlayController?.ShowGrievanceSubmitResult($"[PanelManager] Grievance submission failed: {error}");
+                Debug.LogError($"[PanelManager] Grievance submission failed: {error}");
+                SetReportFlowState(ReportFlowState.ReviewResult); // return user to result so they can retry
+            }
+        );
     }
 
     public void OnBackButtonPressed()
@@ -434,6 +498,7 @@ public class PanelManager : MonoBehaviour
         {
             previewRawImage.texture = null; //Clear the preview image shown to the user to free up memory and reset the UI for next capture
         }
+        currentCVResult = null; //discard any stored CV result since we are going back and not submitting, this prevents stale data from being submitted if user goes back but then later decides to submit without retaking the picture
         SetState(UIState.Idle);
     }
 
@@ -449,6 +514,7 @@ public class PanelManager : MonoBehaviour
             confidence = 0.92f,
             message = "Large pothole detected. Repair fast."
         };
+        currentCVResult = fakeResult; //Store the fake result so it can be submitted if user taps submit without retaking
         cvResultPopulator.Populate(fakeResult);       // fills the panel with the simulated CV result
         SetReportFlowState(ReportFlowState.ReviewResult); //Move to the review result
     }
@@ -585,6 +651,7 @@ public class PanelManager : MonoBehaviour
         if(backButton != null) backButton.SetActive(false); 
         if (analyseButton != null) analyseButton.SetActive(false); 
         if (retakeButton != null) retakeButton.SetActive(false);
+        if(submitGrievanceButton != null) submitGrievanceButton.SetActive(false);
     }
 
     //Show a button and set its interactability
