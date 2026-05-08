@@ -50,6 +50,10 @@ public class DebugOverlayController : MonoBehaviour
     [Tooltip("Shows the current CV API result ")]
     [SerializeField] private TextMeshProUGUI cvAPIResultDebugText;
 
+    [Header("Grievance Submit Debug")]
+    [Tooltip("Shows submit-button/grievance POST debug messages only")]
+    [SerializeField] private TextMeshProUGUI grievanceSubmitDebugText;
+
     [SerializeField] private PanelManager panelManager; //Reference to PanelManager to get state info for debugging
     [SerializeField] private TextMeshProUGUI testModeStatusText; //Shows whether we're in UI test mode or not, NO REAL API calls
    #endregion
@@ -287,13 +291,20 @@ public class DebugOverlayController : MonoBehaviour
 
         reportFlowStateDebugText.text = $"Report Flow State: {reportFlowState}";
     } 
-        public void ShowCVAPIResult(string cvAPIResult)
+
+    public void ShowCVAPIResult(string cvAPIResult)
     {
         if (cvAPIResultDebugText == null) return;
 
         cvAPIResultDebugText.text = $"CV API Result: {cvAPIResult}";
     } 
-    
+
+    public void ShowGrievanceSubmitResult(string grievanceSubmitResult)
+    {
+        if (grievanceSubmitDebugText == null) return;
+
+        grievanceSubmitDebugText.text = $"Grievance Submit: {grievanceSubmitResult}";
+    }
 
     public void ToggleDebugPanelVisibility()
     {

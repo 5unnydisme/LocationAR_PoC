@@ -9,7 +9,7 @@ using UnityEngine.Networking;
 public class ReportSubmissionManager : MonoBehaviour
 {
     [Tooltip("The full URL of the CV analysis endpoint")]
-    private string cvApiUrl = "https://webhook.site/e3720086-4155-4fd5-9bc1-58fadb119ebc"; // Replace with actual CV API endpoint
+    private string cvApiUrl = "https://webhook.site/474a07a2-86d1-4bc6-8452-9bb1f56bea10"; // Replace with actual CV API endpoint
 
     [Tooltip("Reference to DebugOverlayController to see submission steps on device")]
     [SerializeField] private DebugOverlayController debugOverlayController;
