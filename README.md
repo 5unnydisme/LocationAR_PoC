@@ -2,6 +2,13 @@
 
 Unity-based civic infrastructure reporting proof of concept.
 
+## Demo Webhooks
+
+Use these temporary webhook URLs for demo screenshots and payload verification.
+
+- CV analysis upload webhook: https://webhook.site/474a07a2-86d1-4bc6-8452-9bb1f56bea10
+- Grievance submission webhook: https://webhook.site/b6bdfc05-add8-4a7c-a074-fca4b5ead106
+
 ## Git Workflow
 
 ### Main branch

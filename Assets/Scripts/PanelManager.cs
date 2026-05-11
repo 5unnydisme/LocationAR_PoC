@@ -208,6 +208,7 @@ public class PanelManager : MonoBehaviour
             infoPanelGameObject.SetActive(true); //We are reusing the info panel for the main page instructions, so we keep it active and just populate it with the welcome message
             ShowButton (checkInButton, interactable:true); //only state that re-enables the Check-in button, failsafe to prevent multiple calls
             SetStatusMessage("Tap check-in to see information about infrastructure near you.");
+            SetImageCaptureInstructionText(string.Empty); // HACK: clear lingering "Complaint submitted" text when returning to first page
             break;
 
             case UIState.Loading_Location:
@@ -266,6 +267,11 @@ public class PanelManager : MonoBehaviour
         currentReportFlowState = reportState; 
         HideReportSubPanels(); //Cleares the panels specific to report flow substates
         HideAllButtons(); //clears all buttons including capture sub-buttons
+
+        if (reportState != ReportFlowState.AwaitingAnalysis)
+        {
+            CancelInvoke("OnAnalysisComplete");
+        }
         
         switch(reportState)
         {
@@ -294,18 +300,21 @@ public class PanelManager : MonoBehaviour
             previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
             instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
             SetImageCaptureInstructionText("Submitting image for analysis..."); //Set status message to let user know we are working on analysis
-            if (loadingSpinner != null) loadingSpinner.SetActive(true); 
-            if (loadingCircleAnimation != null) loadingCircleAnimation.StartAnimation(); //Trigger the loading circle animation when we start loading API call
+            // if (loadingSpinner != null) loadingSpinner.SetActive(true); 
+            // if (loadingCircleAnimation != null) loadingCircleAnimation.StartAnimation(); //Trigger the loading circle animation when we start loading API call
             
-            //Dummy 3-second delay replace with real network call for CV analysis later 
-            Invoke("OnAnalysisComplete", 3f);
+            //Test mode uses timer-driven fake CV result to keep demo flow deterministic.
+            if (uiTestMode)
+            {
+                Invoke("OnAnalysisComplete", 3f);
+            }
             break;
 
             case ReportFlowState.ReviewResult:
             sharedCameraManager?.SuspendFeed();
             capturedFramePanel.SetActive(true); 
             previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
-             instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
+            instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
             //This is where we will show the results from the CV analysis 
             SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint"); //Placeholder, will replace with real results from the CV analysis later
             if (loadingSpinner != null) loadingSpinner.SetActive(false); 
@@ -437,12 +446,15 @@ public class PanelManager : MonoBehaviour
 
     public void OnRetakeButtonPressed()
     {
+        CancelInvoke("OnAnalysisComplete");
+
         if (sharedCameraManager != null)
         sharedCameraManager.ClearPreviewImage();
 
         if (previewRawImage != null)
         previewRawImage.texture = null;
         currentCVResult = null; //Discard any previously stored result so stale data cannot be submitted
+        cvResultPopulator?.Clear();
 
         SetReportFlowState(ReportFlowState.LiveCapture); //Go back to the live capture state to let user try taking the picture again
     }
@@ -471,13 +483,26 @@ public class PanelManager : MonoBehaviour
         submissionManager.SubmitReport(
             image, snapshot, roadName,
             onSuccess: (CVAnalysisResult result) => {
-            currentCVResult = result; //store so OnSubmitGrievanceButtonPressed can pass it to GrievanceSubmissionManager
-            cvResultPopulator.Populate(result);  
-            SetReportFlowState(ReportFlowState.ReviewResult);     // fills the panel
+                if (uiTestMode)
+                {
+                    debugOverlayController?.ShowCVAPIResult("[PanelManager] CV webhook success (test mode). Waiting for timer-driven fake result.");
+                    return;
+                }
+
+                currentCVResult = result; //store so OnSubmitGrievanceButtonPressed can pass it to GrievanceSubmissionManager
+                cvResultPopulator.Populate(result, roadName);  
+                SetReportFlowState(ReportFlowState.ReviewResult); // fills the panel
             },
             onFailure: (string error) =>
             {
-                debugOverlayController.ShowCVAPIResult($"CV Analysis Failed: {error}");
+                debugOverlayController?.ShowCVAPIResult($"CV Analysis Failed: {error}");
+
+                if (uiTestMode)
+                {
+                    debugOverlayController?.ShowCVAPIResult("[PanelManager] Test mode keeps waiting for timer-driven fake result.");
+                    return;
+                }
+
                 SetReportFlowState(ReportFlowState.Preview); // let user retry
             }
         );
@@ -528,6 +553,8 @@ public class PanelManager : MonoBehaviour
 
     public void OnBackButtonPressed()
     {
+        CancelInvoke("OnAnalysisComplete");
+
         if(sharedCameraManager != null)
         {
             sharedCameraManager.ClearPreviewImage(); //Clear the preview image in the camera manager to free up memory, since we are going back and discarding the current capture
@@ -538,6 +565,7 @@ public class PanelManager : MonoBehaviour
             previewRawImage.texture = null; //Clear the preview image shown to the user to free up memory and reset the UI for next capture
         }
         currentCVResult = null; //discard any stored CV result since we are going back and not submitting, this prevents stale data from being submitted if user goes back but then later decides to submit without retaking the picture
+        cvResultPopulator?.Clear();
         SetState(UIState.Idle);
     }
 
@@ -546,15 +574,20 @@ public class PanelManager : MonoBehaviour
 
     private void OnAnalysisComplete()
     {
+        if (!uiTestMode)
+        {
+            return;
+        }
+
         CVAnalysisResult fakeResult = new CVAnalysisResult
         {
             defect_type = "Pothole",
-            urgency = "High",
             confidence = 0.92f,
-            message = "Large pothole detected. Repair fast."
+            message = "Large pothole detected, needs immediate attention for repair."
         };
+
         currentCVResult = fakeResult; //Store the fake result so it can be submitted if user taps submit without retaking
-        cvResultPopulator.Populate(fakeResult);       // fills the panel with the simulated CV result
+        cvResultPopulator.Populate(fakeResult, currentRoadName); // fills the panel with the simulated CV result
         SetReportFlowState(ReportFlowState.ReviewResult); //Move to the review result
     }
 
@@ -767,12 +800,13 @@ public class PanelManager : MonoBehaviour
     }
 
     private void HideReportSubPanels()
-    {
-        if (instructionpanel != null) instructionpanel.SetActive(false);
-        if (captureSquare != null) captureSquare.SetActive(false);
-        if(capturedFramePanel != null) capturedFramePanel.SetActive(false); 
-        if (awaitingPanel != null) awaitingPanel.SetActive(false);
-        if(reviewResultsPanel != null) reviewResultsPanel.SetActive(false);
-    }
+{
+    if (instructionpanel != null) instructionpanel.SetActive(false);
+    if (captureSquare != null) captureSquare.SetActive(false);
+    if(capturedFramePanel != null) capturedFramePanel.SetActive(false); 
+    if (awaitingPanel != null) awaitingPanel.SetActive(false);
+    if(reviewResultsPanel != null) reviewResultsPanel.SetActive(false);
+    if(successSubmissionPanel != null) successSubmissionPanel.SetActive(false); // HACK: force-hide success panel when leaving report flow
+}
     #endregion
 }
