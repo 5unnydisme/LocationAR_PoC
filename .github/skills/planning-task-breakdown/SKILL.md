@@ -39,6 +39,7 @@ Risk / fallback:
 - Prefer the smallest reversible step that proves the next thing.
 - For tasks < 15 minutes and unambiguous, write `No plan needed — <one-line reason>` and proceed (still in Learning Mode).
 - Plans live in chat. Do not create planning markdown files unless the user asks.
+- Missing inputs listed as blockers, not assumptions. Surface assumptions as blockers with a question mark if the answer is unknown.
 
 ## Worked example
 ```

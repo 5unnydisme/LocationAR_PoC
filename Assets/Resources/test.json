@@ -1,108 +1,218 @@
-
 {
-"locations": [ 
+  "roads": [
     {
-        "name": "Academic Area Pavement", 
-        "type": "Road",
-        "latitude": 26.512542291613055,
-        "longitude": 80.2341046599491, 
-        "condition": "Good",
-        "yearBuilt": 2012,
-        "description": "High footfall pedestrian pavement connecting lecture halls to library",
-        "infrastructureDetails":{
-            "builtBy": "Estate Works Department, IIT-K",
-            "budget": "1.4 Crore",
-            "lastInspection": "03/09/2025",
-            "nextInspection": "10/03/2026"
-
-        },
-
-        "maintenanceHistory":[
-            {
-                "date": "14/10/2025",
-                "description": "Replacement of damaged interlocking tiles and drainage channel cleaning.",
-                "contractor": "Ganga Valley Civil Contractors",
-                "budget": "9.75 Lakhs"
-            },
-
-            {
-                "date": "01/10/2025",
-                "description": "This is a second entry in the maintenance array for first location understanding",
-                "contractor": "Location 1 Second Contractor name",
-                "budget": "530000"
-            }
-        ]
+      "roadName": "Curzon Road",
+      "projectIds": ["proj_001"]
     },
     {
-        "name": "Service Road ESB-2 Building",
-        "type": "Road",
-        "latitude": 26.515513283199311,
-        "longitude": 80.233970359379185,
-        "condition":"Good",
-        "yearBuilt": 2020,
-        "description": "Service road behind Engineering Science Building-2 (ESB-2), IIT-Kanpur",
-       
-        "infrastructureDetails":{
-            "builtBy": "Works Department, IIT-K",
-            "budget": "1.0 Crore",
-            "lastInspection": "02/02/2026",
-            "nextInspection": "10/02/2026"
-        },
-
-        "maintenanceHistory":[
-            {
-                "date": "02/02/2025",
-                "description": "Structural resurfacing to restore the pavement's load-bearing capacity and smoothness.",
-                "contractor": "RDW Roadworks Pvt. Ltd.",
-                "budget": "10,000"
-            },
-
-            {
-                "date": "01/10/2025",
-                "description": "This is a second entry in the maintenance array for second location understanding",
-                "contractor": "Location 2 Second Contractor name",
-                "budget": "530000"
-            }
-        ]
+      "roadName": "CTI Road",
+      "projectIds": ["proj_002"]
     },
-
     {
-      "name": "Fourth Avenue Road",
-        "type": "Road",
-        "latitude": 26.514588386760082,
-        "longitude": 80.235245105971316,
-        "condition":"Good",
-        "yearBuilt": 2004,
-        "description": "Primary internal campus road connecting residential quarters to academic areas",
-       
-        "infrastructureDetails":{
-            "builtBy": "Central Public Works Department, IIT-K",
-            "budget": "3.2 Crore",
-            "lastInspection": "12/08/2025",
-            "nextInspection": "15/02/2026"
-        },
-
-        "maintenanceHistory":[
-            {
-                "date": "28/09/2025",
-                "description": "Surface resurfacing and minor pothole repairs along the eastern stretch of the carriageway.",
-                "contractor": "Shree Balaji Infrastructure Pvt. Ltd.",
-                "budget": "18.5 Lakhs"
-            },
-
-            {
-                "date": "01/10/2025",
-                "description": "This is a second entry in the maintenance array for second location understanding",
-                "contractor": "Location 2 Second Contractor name",
-                "budget": "530000"
-            }
-        ]  
+      "roadName": "Sujanpur Road",
+      "projectIds": ["proj_003", "proj_008"]
+    },
+    {
+      "roadName": "Lucknow Jhasi Road",
+      "projectIds": ["proj_004"]
+    },
+    {
+      "roadName": "Canal Road",
+      "projectIds": ["proj_005", "proj_006"]
+    },
+    {
+      "roadName": "Meston Road",
+      "projectIds": ["proj_006"]
+    },
+    {
+      "roadName": "Govind Nagar Road",
+      "projectIds": ["proj_007"]
+    },
+    {
+      "roadName": "Ramadevi Road",
+      "projectIds": ["proj_008"]
+    },
+    {
+      "roadName": "Lalbangla Road",
+      "projectIds": ["proj_008"]
+    },
+    {
+      "roadName": "Shastri Nagar Road",
+      "projectIds": ["proj_009"]
+    },
+    {
+      "roadName": "Saket Nagar Road",
+      "projectIds": ["proj_009"]
+    },
+    {
+      "roadName": "Shyam Nagar Road",
+      "projectIds": ["proj_009"]
+    },
+    {
+      "roadName": "Gaushala Road",
+      "projectIds": ["proj_010"]
+    },
+    {
+      "roadName": "Kidawi Nagar Road",
+      "projectIds": ["proj_010"]
+    },
+    {
+      "roadName": "Sainik Park Road",
+      "projectIds": ["proj_011"]
+    },
+    {
+      "roadName": "G.T Road (Manoj Hotel)",
+      "projectIds": ["proj_012"]
+    },
+    {
+      "roadName": "Saint Marry School",
+      "projectIds": ["proj_013"]
+    },
+    {
+      "roadName": "Gandhi Gram Road",
+      "projectIds": ["proj_014"]
     }
-
-]
-
-
+  ],
+  "projects": [
+    {
+      "projectId": "proj_001",
+      "workType": "Widening and Strengthening",
+      "budget": "35.28",
+      "startDate": "12/06/2003",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "The Shelter",
+      "stretchDescription": "From Vijay Nagar Sabji Mandi to Mariampur Crossing"
+    },
+    {
+      "projectId": "proj_002",
+      "workType": "Renewal",
+      "budget": "14.00",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "M/s Varad Enterprises",
+      "stretchDescription": "From MG College Crossing to Chetna Crossing"
+    },
+    {
+      "projectId": "proj_003",
+      "workType": "Renewal",
+      "budget": "40.66",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "M/s Radha Rani Developers",
+      "stretchDescription": "Sanigawan-Pipargawan Road to Kashiram Awas"
+    },
+    {
+      "projectId": "proj_004",
+      "workType": "Renewal",
+      "budget": "N/A",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "N/A",
+      "stretchDescription": "Lucknow-Jhansi Road"
+    },
+    {
+      "projectId": "proj_005",
+      "workType": "Renewal",
+      "budget": "15.01 crores",
+      "startDate": "12/03/2024",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "M/s SG Enterprises",
+      "stretchDescription": "From Meghdoot Hotel Crossing to Bara Crossing through Chuniganj, Narendra Mohan Setu, Govindpuri Bridge, and Parag Dairy, up to Barra Bypass"
+    },
+    {
+      "projectId": "proj_006",
+      "workType": "Widening and Strengthening",
+      "budget": "13.51 lakhs",
+      "startDate": "21/11/2020",
+      "endDate": "30/03/2015",
+      "length": "N/A",
+      "contractor": "M/s Varad Enterprises",
+      "stretchDescription": "From Sarsaiya Ghat to Bara Crossing via Meston Road and Latouche Road upto Bans Mandi"
+    },
+    {
+      "projectId": "proj_007",
+      "workType": "Widening and Strengthening",
+      "budget": "122.76",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "The Selter",
+      "stretchDescription": "From Chawla Market Crossing to Hamirpur Road, passing through Parampurwa"
+    },
+    {
+      "projectId": "proj_008",
+      "workType": "Widening and Strengthening",
+      "budget": "211.04",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "Anand Construction",
+      "stretchDescription": "Lal Bangla-Sanigawan Road"
+    },
+    {
+      "projectId": "proj_009",
+      "workType": "Widening and Strengthening",
+      "budget": "1203.67",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "The Shelter",
+      "stretchDescription": "From Vijay Nagar crossing to NH-2 Bypass"
+    },
+    {
+      "projectId": "proj_010",
+      "workType": "Widening and Strengthening",
+      "budget": "628.8",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "Deepak Kumar Agarwal",
+      "stretchDescription": "From Kidwai Nagar Crossing passing through Baradevi up to Nandala"
+    },
+    {
+      "projectId": "proj_011",
+      "workType": "Road Improvent Work by Hot Mix Plant",
+      "budget": "2.98 CR",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "Sri Tirupati Cons.",
+      "stretchDescription": "zone-2 ward-11,Sainik park to Bibipur crossing Road"
+    },
+    {
+      "projectId": "proj_012",
+      "workType": "Road Improvent Work by Hot Mix Plant and Waste Plastic",
+      "budget": "5.99 CR",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "M/s Maa Sarda interprises",
+      "stretchDescription": "Zone-2 Ward -24 G.T road to manoj hotel to Children park"
+    },
+    {
+      "projectId": "proj_013",
+      "workType": "Road Improvent Work by Hot Mix Plant",
+      "budget": "4.72 CR",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "M/s Ganesh and company",
+      "stretchDescription": "Zone -2 Ward-24,G.T road to saint marry school"
+    },
+    {
+      "projectId": "proj_014",
+      "workType": "Road Improvent Work by Hot Mix Plant and Waste Plastic",
+      "budget": "6.79 CR",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "N/A",
+      "contractor": "M/s Maa Sarda interprises",
+      "stretchDescription": "Zone-2 ward-26 gandhi gram to Babita paswan"
+    }
+  ]
 }
-
-
-

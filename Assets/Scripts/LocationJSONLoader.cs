@@ -1,84 +1,147 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
+public class LocationJSONLoader: MonoBehaviour
+{
+    private const string ResourceFileName = "test";
+    private RoadProjectDatabase roadProjectDatabase;
 
- public class LocationJSONLoader: MonoBehaviour
- {
-    public PanelPopulator infoPanel; //reference to the script that will populate the info panel, this will be assigned in the inspector
-    private LocationCollection loadedData; //this is storing the parsed data for lookup
-     void Start()
-     {
-        TextAsset jsonFile = Resources.Load<TextAsset>("test"); //this is linking ot the JSON file that will be looked at
-        if (jsonFile == null) // Null check for safety
+    private void Start()
+    {
+        LoadDatabase();
+    }
+
+    private void LoadDatabase()
+    {
+        TextAsset jsonFile = Resources.Load<TextAsset>(ResourceFileName);
+        if (jsonFile == null)
         {
-            Debug.LogError("Could not find test.json");
+            Debug.LogError($"[LocationJSONLoader] Could not find {ResourceFileName}.json in Resources.");
             return;
         }
 
-        loadedData = JsonUtility.FromJson<LocationCollection>(jsonFile.text); // convers the JSON text into the LocationCollection object, allowing us to use the .commands in unity, and stores that info in the variable lodadedData
-        Debug.Log($"Loaded{loadedData?.locations?.Length ?? 0} locations");
+        roadProjectDatabase = JsonUtility.FromJson<RoadProjectDatabase>(jsonFile.text);
 
-        //LocationCollection data = JsonUtility.FromJson<LocationCollection>(jsonFile.text); //converts the JSON text into a LocationCollection object
+        int roadCount = roadProjectDatabase?.roads?.Length ?? 0;
+        int projectCount = roadProjectDatabase?.projects?.Length ?? 0;
+        
+        if (roadCount == 0 || projectCount == 0)
+        {
+            Debug.LogError($"[LocationJSONLoader] JSON Loaded, but roads/projects are missing or empty");
+            return;
+        }
 
-        //Optional debug to see if the dynamic panel was working by simply displaying first location in JSON DB
-        // if (infoPanel != null && data.locations != null && data.locations.Length >0)
-        // {
-        //     infoPanel.Populate(data.locations[0]); //this is populating the info panel with the first location's data, can be expanded later based on the order selected? 
-        // }   
-        #region Debug logs to verify the data is being loaded correctly, can be removed later
-        // Debug.Log(data.locations.Length); //this will print the number of items in the array
-        // //this will print the number of items in the maintenanceHistory array for the first location    
-        // Debug.Log(data.locations[0].name);
-        // Debug.Log(data.locations[0].type);
-        // Debug.Log(data.locations[0].condition);
-        // Debug.Log(data.locations[0].yearBuilt);
-        // Debug.Log(data.locations[0].description);
-        // Debug.Log(data.locations[0].infrastructureDetails.builtBy);
-        // Debug.Log(data.locations[0].infrastructureDetails.budget);
-        // Debug.Log(data.locations[0].infrastructureDetails.lastInspection);
-        // Debug.Log(data.locations[0].infrastructureDetails.nextInspection);
-        // Debug.Log(data.locations[0].maintenanceHistory.Length);
-        // Debug.Log(data.locations[0].maintenanceHistory[0].date);
-        // Debug.Log(data.locations[0].maintenanceHistory[0].description);
-        // Debug.Log(data.locations[0].maintenanceHistory[0].contractor);
-        // Debug.Log(data.locations[0].maintenanceHistory[0].budget);
+        Debug.Log($"[LocationJSONLoader] Loaded roads={roadCount}, projects={projectCount}");    
+    }
 
-        // Debug.Log(data.locations[1].name);
-        // Debug.Log(data.locations[1].type);
-        // Debug.Log(data.locations[1].condition);
-        // Debug.Log(data.locations[1].yearBuilt);
-        // Debug.Log(data.locations[1].description);
-        // Debug.Log(data.locations[1].infrastructureDetails.builtBy);
-        // Debug.Log(data.locations[1].infrastructureDetails.budget);
-        // Debug.Log(data.locations[1].infrastructureDetails.lastInspection);
-        // Debug.Log(data.locations[1].infrastructureDetails.nextInspection);
-        // Debug.Log(data.locations[1].maintenanceHistory.Length);
-        // Debug.Log(data.locations[1].maintenanceHistory[0].date);
-        // Debug.Log(data.locations[1].maintenanceHistory[0].description);
-        // Debug.Log(data.locations[1].maintenanceHistory[0].contractor);
-        // Debug.Log(data.locations[1].maintenanceHistory[0].budget);
-        #endregion
-     }
-
-     public LocationData GetLocationDataByName(string name)
+    public ProjectRecord[] GetProjectsForRoad (string roadName)
     {
-        if(string.IsNullOrEmpty(name) || loadedData == null || loadedData.locations == null) return null; //our friend the null check
-
-        //Exact match (case-insensitive) 
-        foreach (var loc in loadedData.locations)
+        if(!TryFindMatchingRoadEntry (roadName, out RoadEntry matchedRoad))
         {
-            if (loc == null || string.IsNullOrEmpty(loc.name)) continue; 
-            if (string.Equals(loc.name,name,System.StringComparison.OrdinalIgnoreCase)) return loc;
+            return null;
         }
 
-        //Fallback: Forgiving substring match
-        foreach (var loc in loadedData.locations)
+        if(matchedRoad.projectIds == null || matchedRoad.projectIds.Length == 0)
         {
-            if (loc == null || string.IsNullOrEmpty(loc.name)) continue;
-            if (loc.name.IndexOf(name,System.StringComparison.OrdinalIgnoreCase)>=0 ||
-            name.IndexOf(loc.name, System.StringComparison.OrdinalIgnoreCase)>=0)
-            return loc;
+            return Array.Empty<ProjectRecord>();
         }
 
+        if (roadProjectDatabase == null || roadProjectDatabase.projects == null)
+        {
+            return Array.Empty<ProjectRecord>();
+        }
+        
+        List<ProjectRecord> resolvedProjects = new List<ProjectRecord>();
+
+        foreach (string projectId in matchedRoad.projectIds)
+        {
+            if (string.IsNullOrEmpty(projectId))
+            {
+                continue;
+            }
+
+            ProjectRecord project = FindProjectById(projectId);
+            if (project != null)
+            {
+                resolvedProjects.Add(project);
+            }
+            else
+            {
+                Debug.LogWarning($"[LocationJSONLoader] Missing project for id:{projectId}");
+            }   
+        }
+        return resolvedProjects.ToArray();
+    }
+
+    public int GetProjectCountForRoad(string roadName)
+    {
+        ProjectRecord[] projects = GetProjectsForRoad(roadName);
+        return projects?.Length ?? 0;
+    }
+
+    public bool HasProjectsForRoad(string roadName)
+    {
+        return GetProjectCountForRoad(roadName) > 0;
+    }
+
+    public string GetBestMatchingRoadName (string roadName)
+    {
+        if (TryFindMatchingRoadEntry(roadName, out RoadEntry matchedRoad))
+        {
+            return matchedRoad.roadName;
+        }
         return null;
     }
- }
+
+    private ProjectRecord FindProjectById(string projectId)
+    {
+        if (roadProjectDatabase == null || roadProjectDatabase.projects == null)
+        {
+            return null;
+        }
+
+        foreach (ProjectRecord project in roadProjectDatabase.projects)
+        {
+            if (project == null || string.IsNullOrEmpty(project.projectId))
+            {
+                continue;
+            }
+
+            if (string.Equals(project.projectId, projectId, StringComparison.OrdinalIgnoreCase))
+            {
+                return project;
+            }
+        }
+        return null;
+    }
+
+    private bool TryFindMatchingRoadEntry (string roadName, out RoadEntry matchedRoad)
+    {
+        matchedRoad = null;
+
+        if (string.IsNullOrEmpty (roadName) ||
+            roadProjectDatabase == null ||
+            roadProjectDatabase.roads == null)
+        {
+            return false;
+        }
+
+        foreach (RoadEntry road in roadProjectDatabase.roads)
+        {
+            if (road == null || string.IsNullOrEmpty(road.roadName))
+            {
+                continue;
+            }
+
+            if (road.roadName.IndexOf(roadName, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                roadName.IndexOf(road.roadName, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                matchedRoad = road;
+                return true;
+            }
+        }
+        return false;
+    }
+
+}

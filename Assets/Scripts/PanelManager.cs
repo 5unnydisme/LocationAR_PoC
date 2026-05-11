@@ -79,11 +79,30 @@ public class PanelManager : MonoBehaviour
     [Tooltip("Retry button - only shown in error state, takes users back to the Main page and restarts the check-in flow")]
     [SerializeField] private GameObject retryButton; 
 
+    [Header("Learn More - Project List UI")]
+    [Tooltip("Header panel shown at the top of Learn More with road title and project count.")]
+    [SerializeField] private GameObject roadHeaderPanel;
+
+    [Tooltip("Scrollable panel that contains the dynamic project card list.")]
+    [SerializeField] private GameObject projectCardScrollPanel;
+
+    [Tooltip("Content container under the scroll view where project cards are instantiated.")]
+    [SerializeField] private Transform projectCardContentContainer;
+
+    [Tooltip("Prefab to instantiate for each project linked to the selected road.")]
+    [SerializeField] private GameObject projectCardPrefab;
+
+    [Tooltip("Header text field that displays the selected road name.")]
+    [SerializeField] private TextMeshProUGUI roadHeaderText;
+
+    [Tooltip("Header text field that displays the number of projects for the selected road.")]
+    [SerializeField] private TextMeshProUGUI projectCountText;
+
 
     [Header("UI Test Mode")] 
     [Tooltip("When enabled, simulates a full successful flow without calling API")]
     private bool uiTestMode = false; 
-    private string testRoadName = "Fourth Avenue"; //Default road name from the JSON used for simulating the success call
+    private string testRoadName = "Canal Road"; //Default road name from the JSON used for simulating the success call
 
     [Header("ImageCapture UI Elements - Live Capture")]
 
@@ -349,20 +368,40 @@ public class PanelManager : MonoBehaviour
     }
 
     //LearnMore button OnClick
-    //Uses stored roadName - PanelPopulator does all the UI work 
+    //Uses stored roadName to build the dynamic road-level project list view.
     public void OnLearnMoreButtonPressed()
     {
-        if(string.IsNullOrEmpty(currentRoadName)) return; //Safety check, should never happen because button only shows in success states with valid roadName, but good to be safe
+        if (string.IsNullOrEmpty(currentRoadName) || locationJSONLoader == null)
+        {
+            Debug.LogWarning("[PanelManager] Learn More blocked: missing road name or loader reference.");
+            return;
+        }
 
-        var locData = locationJSONLoader.GetLocationDataByName(currentRoadName);
-        if (locData  == null) return; 
+        string matchedRoadName = locationJSONLoader.GetBestMatchingRoadName(currentRoadName);
+        string roadNameForLookup = string.IsNullOrEmpty(matchedRoadName) ? currentRoadName : matchedRoadName;
 
-        HideAllPanels(); //Hide all panels before showing the info panel, prevents overlaps
-        HideAllButtons(); //Hide buttons to prevent overlap with info panel buttons
-        SetStatusMessage(""); //Clear status message to prevent overlap with panelpopulator  text
-        panelPopulator.Populate(locData); //Populate the info panel with the data from the JSON
-        panelPopulatorGameObject.SetActive(true); //Show the info panel
-        reportIssueButton.SetActive(true); //Show the report issue button
+        ProjectRecord[] projects = locationJSONLoader.GetProjectsForRoad(roadNameForLookup);
+        if (projects == null || projects.Length == 0)
+        {
+            Debug.LogWarning($"[PanelManager] Learn More found no projects for road '{roadNameForLookup}'.");
+            SetState(UIState.Success_NoData, roadNameForLookup);
+            return;
+        }
+
+        HideAllPanels(); //Hide all panels before showing Learn More content and project list
+        HideAllButtons(); //Hide buttons first, then show only Report Issue for road-level action
+        HideReportSubPanels();
+        SetStatusMessage(string.Empty); //Clear state status text so the Learn More header remains the focus
+
+        ClearExistingProjectCards();
+        InstantiateProjectCards(projects);
+        UpdateRoadHeaderTexts(roadNameForLookup, projects.Length);
+
+        if (roadHeaderPanel != null) roadHeaderPanel.SetActive(true);
+        if (projectCardScrollPanel != null) projectCardScrollPanel.SetActive(true);
+        ShowButton(reportIssueButton, interactable: true);
+
+        debugOverlayController?.ShowUIState("LearnMore_ProjectCards", roadNameForLookup);
     }
 
     // Method for the ReportIssue button, what we want here is that on click the UI State changes to the Capture Image one
@@ -601,15 +640,16 @@ public class PanelManager : MonoBehaviour
             return;
         }
 
-        //Road name returned - check whether there is a JSON entry for it
-        var locData = locationJSONLoader?.GetLocationDataByName(roadName);
-        
-        Debug.Log($"[PanelManager] Road: '{roadName}' → JSON: '{(locData == null ? "none" : locData.name)}'");
+        string matchedRoadName = locationJSONLoader?.GetBestMatchingRoadName(roadName);
+        string roadNameForState = string.IsNullOrEmpty(matchedRoadName) ? roadName : matchedRoadName;
+        int projectCount = locationJSONLoader != null ? locationJSONLoader.GetProjectCountForRoad(roadNameForState) : 0;
 
-        if(locData != null)
-        SetState(UIState.Success_WithData, roadName); 
-        else 
-        SetState(UIState.Success_NoData, roadName);
+        Debug.Log($"[PanelManager] Road: '{roadName}' → matched: '{roadNameForState}' | projects: {projectCount}");
+
+        if (projectCount > 0)
+            SetState(UIState.Success_WithData, roadNameForState);
+        else
+            SetState(UIState.Success_NoData, roadNameForState);
     }
     #endregion 
 
@@ -637,6 +677,59 @@ public class PanelManager : MonoBehaviour
         {
           imageCaptureInstructionText.text = message;  
         }   
+    }
+
+    private void UpdateRoadHeaderTexts(string roadName, int projectCount)
+    {
+        if (roadHeaderText != null)
+        {
+            roadHeaderText.text = roadName;
+        }
+
+        if (projectCountText != null)
+        {
+            string suffix = projectCount == 1 ? "project" : "projects";
+            projectCountText.text = $"{projectCount} {suffix}";
+        }
+    }
+
+    private void ClearExistingProjectCards()
+    {
+        if (projectCardContentContainer == null)
+        {
+            return;
+        }
+
+        for (int i = projectCardContentContainer.childCount - 1; i >= 0; i--)
+        {
+            Destroy(projectCardContentContainer.GetChild(i).gameObject);
+        }
+    }
+
+    private void InstantiateProjectCards(ProjectRecord[] projects)
+    {
+        if (projectCardContentContainer == null || projectCardPrefab == null || projects == null)
+        {
+            return;
+        }
+
+        foreach (ProjectRecord project in projects)
+        {
+            GameObject cardObject = Instantiate(projectCardPrefab, projectCardContentContainer);
+            ProjectCardController cardController = cardObject.GetComponent<ProjectCardController>();
+
+            if (cardController != null)
+            {
+                cardController.Populate(project);
+            }
+            else
+            {
+                Debug.LogWarning("[PanelManager] Project card prefab is missing ProjectCardController.");
+            }
+        }
+
+        // Optional fallback if content height appears stale on specific devices:
+        // LayoutRebuilder.ForceRebuildLayoutImmediate(projectCardContentContainer as RectTransform);
     }
 
     //Hide all four Statebuttons before each state shows the correct on
@@ -668,7 +761,9 @@ public class PanelManager : MonoBehaviour
         if (logoScreen != null) logoScreen.SetActive(false); 
         if (noLocationPanel != null) noLocationPanel.SetActive(false);
         if (infoPanelGameObject != null) infoPanelGameObject.SetActive(false);
-        if (panelPopulatorGameObject != null) panelPopulatorGameObject.SetActive(false); 
+        if (panelPopulatorGameObject != null) panelPopulatorGameObject.SetActive(false);
+        if (roadHeaderPanel != null) roadHeaderPanel.SetActive(false);
+        if (projectCardScrollPanel != null) projectCardScrollPanel.SetActive(false);
     }
 
     private void HideReportSubPanels()
