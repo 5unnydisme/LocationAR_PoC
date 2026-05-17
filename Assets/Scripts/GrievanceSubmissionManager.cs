@@ -125,7 +125,6 @@ public class GrievanceSubmissionManager : MonoBehaviour
             request.timeout = requestTimeoutSeconds;
             yield return request.SendWebRequest();
 
-            //Anchor and keep the line and everything after it
             debugOverlayController?.ShowGrievanceSubmitResult(
             $"[GrievanceSubmissionManager] Response | Code:{request.responseCode} | Result: {request.result}");
            
