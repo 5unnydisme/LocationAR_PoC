@@ -72,7 +72,7 @@ The user is learning. **Do not edit those files directly.** Show code in chat on
 - **Complaint API** → new thin adapter when the contract lands; do not inline into [PanelManager.cs](Assets/Scripts/PanelManager.cs).
 
 ## Skills (invoke when the task matches)
-- `learning-mode-explain` — code presentation rules (chat-only, full file, block-by-block).
+- `learning-mode-explain` — code presentation rules (chat-only, prose "why" + targeted snippet, full file only on request).
 - `planning-task-breakdown` — milestone-aware planning with blockers + owners.
 - `mobile-best-practices` — Android permissions, GPS battery, network resilience, secrets, PII.
 - `unity-api-reference` — cite docs.unity3d.com for Unity 2023.2.

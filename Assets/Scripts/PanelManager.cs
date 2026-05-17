@@ -41,6 +41,13 @@ public class PanelManager : MonoBehaviour
         Success //This is where submission is confirmed, we can success panel here
     }
 
+    public enum TestMode
+    {
+        Off, //All API calls are real (Maps + CV + Grievance)
+        FullMock, //All API calls are fake (Maps + CV + Grievance)
+        CVLive //Maps is mocked,CV and Grievance are real
+    }
+
     #region Inspector Configuration
     [Header("UI Panels")]
     [Tooltip("The logo screen shown when the app starts")]
@@ -97,12 +104,11 @@ public class PanelManager : MonoBehaviour
 
     [Tooltip("Header text field that displays the number of projects for the selected road.")]
     [SerializeField] private TextMeshProUGUI projectCountText;
-
-
-    [Header("UI Test Mode")] 
-    [Tooltip("When enabled, simulates a full successful flow without calling API")]
-    private bool uiTestMode = false; 
-    private string testRoadName = "Canal Road"; //Default road name from the JSON used for simulating the success call
+ 
+    [Header("Test Mode")]
+    [Tooltip("Off = real flow. FullMock = all fake. CVLive = mock Maps + real CV + grievance")]
+    [SerializeField] private TestMode testMode = TestMode.Off;
+     private string testRoadName = "Canal Road"; //Default road name from the JSON used for simulating the success call
 
     [Header("ImageCapture UI Elements - Live Capture")]
 
@@ -161,12 +167,15 @@ public class PanelManager : MonoBehaviour
 
     #region Initial Setup
 
-    public bool isTestModeActive => uiTestMode; 
+    public bool isTestModeActive => testMode != TestMode.Off;
+    public bool isMapsLocked => testMode != TestMode.Off;
+    public bool isFullMock => testMode == TestMode.FullMock;
+    public bool isCVLive => testMode == TestMode.CVLive; 
     public void ToggleTestMode()
     {
-        uiTestMode = !uiTestMode; 
-        debugOverlayController?.ShowTestMode(uiTestMode); //Update the debug overlay if it exists
-        Debug.Log($"[PanelManager] UI Test Mode: {uiTestMode}");
+        testMode = (TestMode)(((int)testMode +1) % 3); //Cycle through - Off -> FullMock -> CVLive -> Off
+        debugOverlayController?.ShowTestMode(testMode.ToString());
+        Debug.Log($"[PanelManager] Test Mode: {testMode}");
     }
 
     private void SetupInitialUI()
@@ -175,7 +184,7 @@ public class PanelManager : MonoBehaviour
         if (loadingSpinner != null) loadingSpinner.SetActive(false); //Ensures that the spinner is hidden at the beginning
         logoScreen.SetActive(true); 
         SetState(UIState.Idle); //Set initial state to Idle
-        debugOverlayController?.ShowTestMode(uiTestMode); //Update the debug overlay if it exists
+        debugOverlayController?.ShowTestMode(testMode.ToString()); //Update the debug overlay if it exists
     }
     #endregion
 
@@ -303,11 +312,11 @@ public class PanelManager : MonoBehaviour
             // if (loadingSpinner != null) loadingSpinner.SetActive(true); 
             // if (loadingCircleAnimation != null) loadingCircleAnimation.StartAnimation(); //Trigger the loading circle animation when we start loading API call
             
-            //Test mode uses timer-driven fake CV result to keep demo flow deterministic.
-            if (uiTestMode)
-            {
-                Invoke("OnAnalysisComplete", 3f);
-            }
+            //FullMock uses timer-driven fake CV result to keep demo flow going
+            if (isFullMock)
+                {
+                    Invoke("OnAnalysisComplete", 3f); //After 3 seconds, simulates fake CV results
+                }
             break;
 
             case ReportFlowState.ReviewResult:
@@ -354,16 +363,16 @@ public class PanelManager : MonoBehaviour
 
      public void onCheckInButtonPressed()
     {
-        //Test ModeL If the UI is in Test Mode, we skip straight to simulating the API call 
-        if (uiTestMode)
+        //When maps are locked (FullMock or CVLive), skip GPS + Maps and simulate road resolution.
+        if (isMapsLocked)
         {
-            ShowButton(checkInButton, interactable: false); //Lock the button to prevent multipl presses, like regular flow 
-            SetState(UIState.Loading_Location); //Show the spinner + "Getting your location text" 
-            Invoke("SimulateAPIResponse", 2f); //After 2s, skip GPS and go straight to simulating the API call 
-            return; //once we hit return here, it will literally leave this method and move on...which is key in not making the API call
-        }
+            ShowButton(checkInButton, interactable:false); //Lock the button to prevent multiple presses, like real flow 
+            SetState(UIState.Loading_Location); //Show spinner + location status;
+            Invoke ("SimulateAPIResponse", 2f); //Skip GPS and map lookup
+            return;//once we hit return here, it will literally leave this method and move on...which is key in not making the API call
+        } 
 
-        //REAL FLOW: If not in the uiTestMode. 
+        //REAL FLOW: only in Off mode 
         if (locationServiceManager == null || googleMapsServices == null) return;
 
         //Lock the button to prevent multiple presses while we get location and make API call
@@ -462,47 +471,56 @@ public class PanelManager : MonoBehaviour
     public void OnAnalyseButtonPressed()
     {
         Texture2D image = sharedCameraManager?.GetPreviewImage();
-
-        //In test mode, GPS and Google Maps are bypassed, so we supply hardcoded stand-ins
-        //currentRoadName is set by SimulateSuccess -> OnRoadNameReceived via testRoadName
-        LocationServiceManager.LocationSnapshot snapshot;
+        //When maps are locked (FullMock or CVLive), use the hardcoded stand-ins;
+        LocationServiceManager.LocationSnapshot snapshot; 
         string roadName;
-        if (uiTestMode)
+        if (isMapsLocked)
         {
             snapshot = new LocationServiceManager.LocationSnapshot(26.515430f,80.235020f,5f); //Nursery GPS value
-            roadName = currentRoadName;
+            roadName = string.IsNullOrEmpty(currentRoadName)? testRoadName: currentRoadName; 
         }
-
-        else{
-            snapshot = locationServiceManager.LastLocationSnapshot; 
+        else
+        {
+            snapshot = locationServiceManager.LastLocationSnapshot;
             roadName = googleMapsServices.ActiveLocationName;
         }
 
         SetReportFlowState(ReportFlowState.AwaitingAnalysis); 
 
+        //FullMock does not call CV APi. AwaitingAnalysis is already scheduled OnAnalysisComplete.
+        if (isFullMock)
+        {
+            debugOverlayController?.ShowCVAPIResult("[PanelManager] FullMock active. Skipping real CV call");
+            return;
+        }
+
         submissionManager.SubmitReport(
             image, snapshot, roadName,
-            onSuccess: (CVAnalysisResult result) => {
-                if (uiTestMode)
+            onSuccess: (CVAnalysisResult result) => 
+            {
+                if (result == null)
                 {
-                    debugOverlayController?.ShowCVAPIResult("[PanelManager] CV webhook success (test mode). Waiting for timer-driven fake result.");
-                    return;
+                    if (isCVLive)
+                    {
+                        debugOverlayController?.ShowCVAPIResult("[PanelManager] CVLive 200-OK smoke test returned null payload. Using mock result for UI flow");
+                        result = BuildMockCVResult(); //Builds a mock CV result to keep the demo flow intact
+                    }
+                    else
+                    {
+                        debugOverlayController?.ShowCVAPIResult("[PanelManager] CV returned null reference in Off mode.");
+                        SetReportFlowState (ReportFlowState.Preview); //Return to preview to let user try again, since we didn't get a valid result back from the CV API
+                        return;
+                    }
                 }
 
                 currentCVResult = result; //store so OnSubmitGrievanceButtonPressed can pass it to GrievanceSubmissionManager
                 cvResultPopulator.Populate(result, roadName);  
                 SetReportFlowState(ReportFlowState.ReviewResult); // fills the panel
             },
+
             onFailure: (string error) =>
             {
                 debugOverlayController?.ShowCVAPIResult($"CV Analysis Failed: {error}");
-
-                if (uiTestMode)
-                {
-                    debugOverlayController?.ShowCVAPIResult("[PanelManager] Test mode keeps waiting for timer-driven fake result.");
-                    return;
-                }
-
                 SetReportFlowState(ReportFlowState.Preview); // let user retry
             }
         );
@@ -511,27 +529,33 @@ public class PanelManager : MonoBehaviour
 
     public void OnSubmitGrievanceButtonPressed()
     {
-        if (grievanceSubmissionManager == null)
+        if (grievanceSubmissionManager == null)//Main null check 
+            {
+                debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] GrievanceSubmissionManager is not assigned in the Inspector");
+                return;
+            }
+
+        // Full Mock: keep[ entire backend flow fake (no grievance API call
+        if (isFullMock)
         {
-            debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] GrievanceSubmissionManager is not assigned in the Inspector");
+            debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] FullMock active. Skipping real API call");
             return;
         }
 
-        LocationServiceManager.LocationSnapshot snapshot; 
-        string roadName;
+        LocationServiceManager.LocationSnapshot snapshot;
+        string roadName; 
 
-        if (uiTestMode)
+        if (isMapsLocked)
         {
             snapshot = new LocationServiceManager.LocationSnapshot(26.515430f,80.235020f,5f); //Nursery GPS value
-            roadName = currentRoadName;
+            roadName = string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName;  
         }
-
-        else{
-            snapshot = locationServiceManager.LastLocationSnapshot; 
+        else
+        {
+            snapshot = locationServiceManager.LastLocationSnapshot;
             roadName = googleMapsServices.ActiveLocationName;
         }
-
-        SetReportFlowState(ReportFlowState.SubmittingGrievance); //Move to the submitting grievance sub-state to show the relevant UI
+        SetReportFlowState(ReportFlowState.SubmittingGrievance);
 
          grievanceSubmissionManager.SubmitGrievance(
             currentCVResult,
@@ -574,21 +598,25 @@ public class PanelManager : MonoBehaviour
 
     private void OnAnalysisComplete()
     {
-        if (!uiTestMode)
+        if (!isFullMock)
         {
             return;
         }
 
-        CVAnalysisResult fakeResult = new CVAnalysisResult
+        CVAnalysisResult fakeResult = BuildMockCVResult();
+        currentCVResult = fakeResult; //Store the fake result so it cane be it can be submitted if user taps submit without retaking
+        cvResultPopulator.Populate(fakeResult, string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName);
+        SetReportFlowState(ReportFlowState.ReviewResult); 
+    }
+
+    private CVAnalysisResult BuildMockCVResult()
+    {
+        return new CVAnalysisResult
         {
             defect_type = "Pothole",
             confidence = 0.92f,
             message = "Large pothole detected, needs immediate attention for repair."
         };
-
-        currentCVResult = fakeResult; //Store the fake result so it can be submitted if user taps submit without retaking
-        cvResultPopulator.Populate(fakeResult, currentRoadName); // fills the panel with the simulated CV result
-        SetReportFlowState(ReportFlowState.ReviewResult); //Move to the review result
     }
 
     //AddInfo button OnClick - place holder for future user data submission feature
@@ -641,7 +669,7 @@ public class PanelManager : MonoBehaviour
 
             } 
         }
-        //Method for similuatiing the API reespose when UITestMode is active, also the testRoadName can be changed in the inspector region. 
+        //Method for simulating the API response when maps are locked by TestMode.
         private void SimulateAPIResponse()
         {
             SetState(UIState.Loading_API); 

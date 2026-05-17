@@ -1,4 +1,6 @@
+using System;
 using System.Collections;
+using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -12,10 +14,13 @@ public class GrievanceSubmissionManager : MonoBehaviour
     #region Inspector Configuration
     [Header("The full URL of the Grievance submission endpoint")]
     [Tooltip("The full URL of the grievance database endpoint.")]
-     private string grievanceApiUrl = "https://webhook.site/b6bdfc05-add8-4a7c-a074-fca4b5ead106"; //TODO: Replace with actual API link 
+     private const string grievanceApiUrl = "http://35.154.241.163:8002/v1/ingestion/run"; 
+         
+    // HARDCODED for 200 SMOKE TEST — move to secrets.json post-demo
+    private const string apiKey = "1Diq7jeowJGTosFK4p4Q4j-bF92vtLTf8DW2gDEk9YI";
 
-    [Tooltip("External ID sent with every grievance to identify the reports coming from the mobile app.")]
-    [SerializeField] private string externalId ="MA001";
+    [Tooltip("Prefix used to build each record's External ID sent with every grievance to identify the reports coming from the mobile app. A Unix timestamp is appended at submission time to keep IDs unique.")]
+    [SerializeField] private string externalId ="MA";
 
     [Tooltip("Request timeout in seconds.")]
     [SerializeField] private int requestTimeoutSeconds = 30;
@@ -24,6 +29,25 @@ public class GrievanceSubmissionManager : MonoBehaviour
     [Tooltip("Reference to DebugOverlayController to see grievance submission steps on the device")]
     [SerializeField] private DebugOverlayController debugOverlayController;
     #endregion
+
+    //DTO - Data Transfer Objects for the ingestion payload expected by the API
+    [System.Serializable]
+    public class IngestionRequest
+    {
+        public IngestionComplaintRecord[] records;
+    }
+
+    [System.Serializable]
+    public class IngestionComplaintRecord
+    {
+        public string external_id;
+        public string created_at;
+        public string updated_at;
+        public string category;
+        public string status;
+        public string zone;
+        public string ward;
+    }
 
     //Public entry point- called by PanelManager when the Submit button is pressed
     public void SubmitGrievance(
@@ -56,54 +80,61 @@ public class GrievanceSubmissionManager : MonoBehaviour
         //that avoids a pointless timeout wait when the device has no connectivity
         if (Application.internetReachability == NetworkReachability.NotReachable)
         {
-                debugOverlayController?.ShowGrievanceSubmitResult("[GrievanceSubmissionManager] Offline - skipping grievance POST");
-            onFailure?.Invoke("No netwrok connection");
+            debugOverlayController?.ShowGrievanceSubmitResult("[GrievanceSubmissionManager] Offline - skipping grievance POST");
+            onFailure?.Invoke("No network connection");
             yield break;
         }
 
             debugOverlayController?.ShowGrievanceSubmitResult("[GrievanceSubmissionManager] Building grievance payload...");
 
-        //Step 2: Build the form payload
-        //Text-only POST- no image being sent, that is sent to CVAPI for analysis 
-        //WWWForm encodes each AddField() call as a key-value pair in the multipart body
-        WWWForm form = new WWWForm();
+        //Step 2: Build record payload and wrap in top-level ingestion request shape
+        string createdAt = snapshot.timestamp.ToString("o");
 
-        //CV analysis fields- the result produced by ReportSubmissionManager
-        form.AddField("defect_type",    cvResult.defect_type ??"");
-        form.AddField("urgency",        cvResult.urgency ??"");
-        form.AddField("confidence",     cvResult.confidence.ToString("F4"));
-        form.AddField("message",        cvResult.message ??"");
-
-        //Location fields
-        form.AddField("road_name",           roadName ??"UKNOWN");
-        form.AddField("latitude",            snapshot.latitude.ToString("F6"));
-        form.AddField("longitude",           snapshot.longitude.ToString("F6"));
-        form.AddField("horizontal_accuracy", snapshot.horizontalAccuracy.ToString("F2"));
-        form.AddField("timestamp",           snapshot.timestamp.ToString("o")); // ISO 8601
-
-        //App-source identifier
-        //The grievance database uses this field to know the report came from the mobile app
-        //The value is Inspector-configurable and can be edited without code change
-        form.AddField("external_id", externalId);
-
-            debugOverlayController?.ShowGrievanceSubmitResult("[GrievanceSubmissionManager] Sending grievance POST...");
-
-        //Step 3: Send the POST request
-        //UnityWebRequest.Post() with a WWWForm sets the correct Content-Type header automatically
-        //The using block disposes the native handle when done-prevents memory leaks
-        using (UnityWebRequest request = UnityWebRequest.Post(grievanceApiUrl, form))
+        IngestionComplaintRecord record = new IngestionComplaintRecord
         {
+            external_id = $"{externalId}-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}",
+            created_at = createdAt,
+            updated_at = createdAt,
+            category = "Roads", // HARDCODED: no category source wired from app data yet
+            status = "Pending", // HARDCODED: no lifecycle/status source wired from app data yet
+            zone = "Zone 6", // HARDCODED: no zone mapping available from current app context
+            ward = "Vishnupuri-40" // HARDCODED: no ward mapping available from current app context
+        };
+
+        IngestionRequest requestPayload = new IngestionRequest
+        {
+            records = new[] { record }
+        };
+
+        string json = JsonUtility.ToJson(requestPayload);
+        debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] Payload: {json}");
+
+        byte[] bodyBytes = Encoding.UTF8.GetBytes(json); //Check if this is a helper method
+        debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] Sending grievance POST...");
+
+        //Step 3: Send raw JSON POST request to API
+        //Use bare UnityWebRequest + UploadHandlerRaw so the API receives application/json.
+        using (UnityWebRequest request = new UnityWebRequest(grievanceApiUrl, "POST"))
+        {
+            request.uploadHandler = new UploadHandlerRaw(bodyBytes);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Accept", "application/json");
+            request.SetRequestHeader("X-API-Key", apiKey);
+
             request.timeout = requestTimeoutSeconds;
             yield return request.SendWebRequest();
 
-                debugOverlayController?.ShowGrievanceSubmitResult(
-                $"[GrievanceSubmissionManager] Response | Code:{request.responseCode} | Result: {request.result}");
-
+            //Anchor and keep the line and everything after it
+            debugOverlayController?.ShowGrievanceSubmitResult(
+            $"[GrievanceSubmissionManager] Response | Code:{request.responseCode} | Result: {request.result}");
+           
             //Step 4: Handle failure
             if (request.result != UnityWebRequest.Result.Success)
             {
                 string errorMsg = $"Submission failed: {request.error} (code{request.responseCode})";
-                    debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] {errorMsg}");
+                debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] {errorMsg}");
+               debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] Response body: {request.downloadHandler?.text}");
                 onFailure?.Invoke(errorMsg);
                 yield break;
             }
@@ -114,4 +145,6 @@ public class GrievanceSubmissionManager : MonoBehaviour
             onSuccess?.Invoke();
         }
     }
+
 }
+

@@ -8,8 +8,10 @@ using UnityEngine.Networking;
 
 public class ReportSubmissionManager : MonoBehaviour
 {
-    [Tooltip("The full URL of the CV analysis endpoint")]
-    private string cvApiUrl = "https://webhook.site/474a07a2-86d1-4bc6-8452-9bb1f56bea10"; // Replace with actual CV API endpoint
+    private const string CV_API_URL = "https://product.airawat.org/cctv-analytics/predict";
+
+    [Tooltip("Supported models verbatim: animals, garbage, potholes, fallentrees, hoardings, roaddamage")]
+    [SerializeField] private string modelName = "potholes";
 
     [Tooltip("Reference to DebugOverlayController to see submission steps on device")]
     [SerializeField] private DebugOverlayController debugOverlayController;
@@ -51,20 +53,22 @@ public class ReportSubmissionManager : MonoBehaviour
         WWWForm form = new WWWForm();
 
         // Text fields — metadata
-        form.AddField("road_name", roadName ?? "UNKNOWN");
-        form.AddField("latitude", snapshot.latitude.ToString("F6"));
-        form.AddField("longitude", snapshot.longitude.ToString("F6"));
-        form.AddField("horizontal_accuracy", snapshot.horizontalAccuracy.ToString("F2"));
-        form.AddField("timestamp", snapshot.timestamp.ToString("o")); // ISO 8601 format
+        //TODO: Delete the commented out metadata, will be sending these with submit button.
+        // form.AddField("road_name", roadName ?? "UNKNOWN");
+        // form.AddField("latitude", snapshot.latitude.ToString("F6"));
+        // form.AddField("longitude", snapshot.longitude.ToString("F6"));
+        // form.AddField("horizontal_accuracy", snapshot.horizontalAccuracy.ToString("F2"));
+        // form.AddField("timestamp", snapshot.timestamp.ToString("o")); // ISO 8601 format
+        form.AddField("model_name", modelName); //tells the CV Server which model to use for analysis
 
         // Binary field — the image
-        // "image"      = field name the CV server expects
+        // "file"       = field name the CV server expects
         // "report.jpg" = filename the server will see
         // "image/jpeg" = MIME type
-        form.AddBinaryData("image", jpgBytes, "report.jpg", "image/jpeg");
+        form.AddBinaryData("file", jpgBytes, "report.jpg", "image/jpeg");
 
         // Step 3: Send the POST request
-        using (UnityWebRequest request = UnityWebRequest.Post(cvApiUrl, form))
+        using (UnityWebRequest request = UnityWebRequest.Post(CV_API_URL, form))
         {
             request.timeout = 30; // CV analysis can take time and after 30 it will loop back
             yield return request.SendWebRequest();
@@ -73,35 +77,48 @@ public class ReportSubmissionManager : MonoBehaviour
                 $"Response | Code: {request.responseCode} | Result: {request.result}");
 
             // Step 4: Handle failure
-            if (request.result != UnityWebRequest.Result.Success)
+            // Three failure shapes we care about:
+            //   (a) Transport failure  - no HTTP response at all (no internet, DNS, timeout, TLS).
+            //   (b) HTTP non-200       - server replied, but with an error code. 422 is the most
+            //                            useful one for us: FastAPI returns the validation error
+            //                            body explaining which field it rejected (e.g. wrong
+            //                            model_name). We log that body verbatim so the engineer
+            //                            can read it on-device without rebuilding.
+            //   (c) Anything else      - fall through to onFailure with whatever we have.
+
+            string responseBody = request.downloadHandler?.text ?? "";
+            //We are creating different buckets of the responses we will get to get a 
+            //better sense of why it the request has failed when it does. 
+            if (request.result == UnityWebRequest.Result.ConnectionError ||
+                request.result == UnityWebRequest.Result.DataProcessingError)
             {
-                debugOverlayController?.ShowCVAPIResult($"Request failed: {request.error}");
-                onFailure?.Invoke(request.error);
+                //(a) Transport failure - request.error is meaningful here, it contains the error message (e.g. "No internet connection", "TLS handshake failed", "Request timed out")
+                debugOverlayController?.ShowCVAPIResult($"Network error: {request.error}");
+                onFailure?.Invoke($"Network error: {request.error}");
                 yield break;
             }
 
-            // Step 5: Handle success — parse the JSON response
-            string responseJSON = request.downloadHandler.text;
-            debugOverlayController?.ShowCVAPIResult($"Raw JSON: {responseJSON}");
-
-            if (string.IsNullOrEmpty(responseJSON))
+            if (request.responseCode != 200)
             {
-                onFailure?.Invoke("Empty response from server");
+                //HTTP non-200 - log the response body so the 422 validation details are visible
+                debugOverlayController?.ShowCVAPIResult(
+                    $"HTTP {request.responseCode} | Body: {responseBody}");
+                onFailure?.Invoke($"HTTP {request.responseCode}: {responseBody}");
                 yield break;
             }
 
-            CVAnalysisResult result = JsonUtility.FromJson<CVAnalysisResult>(responseJSON);
-
-            if (result == null)
-            {
-                debugOverlayController?.ShowCVAPIResult("Failed to parse CV response");
-                onFailure?.Invoke("Invalid JSON response");
-                yield break;
-            }
-
-            debugOverlayController?.ShowCVAPIResult($"Analysis complete: {result.defect_type}");
-            onSuccess?.Invoke(result);
+            // Step 5: Handle success — SMOKE TEST ONLY
+            // We have a 200 from the real CV endpoint. We are NOT parsing the response yet:
+            // the PredictionResponse schema (detected, detections[], bbox, etc.) needs to be
+            // confirmed with the CV engineer before we rewrite CVAnalysisResult and the
+            // populator. For now we log the raw body for inspection and hand back null.
+            // PanelManager's onSuccess lambda treats null as "use the mock CVAnalysisResult"
+            // so the rest of the demo flow keeps working.
+            // TODO: parse responseBody into CVAnalysisResult once the PredictionResponse
+            // field names are confirmed. Drop the null fallback in PanelManager at the same time.
+            Debug.Log($"[ReportSubmissionManager] CV 200 OK — raw body: {responseBody}");
+            debugOverlayController?.ShowCVAPIResult($"200 OK | bytes={responseBody.Length}");
+            onSuccess?.Invoke(null);
         }
     }
 }
-  

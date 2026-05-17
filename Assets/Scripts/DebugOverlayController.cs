@@ -79,6 +79,25 @@ public class DebugOverlayController : MonoBehaviour
         StartCoroutine(UpdateUI());
     }
 
+    public void ShowTestMode(string mode)
+    {
+        if (testModeStatusText == null) return;
+
+        switch (mode)
+        {
+            case "FullMock":
+            testModeStatusText.text = "TEST MODE: FULL MOCK (no real API calls)";
+            break;
+
+            case "CVLive":
+            testModeStatusText.text = "TEST MODE: CV LIVE (Maps mocked, CV Real)";
+            break;
+
+            default:
+            testModeStatusText.text = "TEST MODE: OFF (real API calls)";
+            break;
+        }
+    }
     private IEnumerator UpdateUI()
     {
         isUpdating = true; 
@@ -261,16 +280,6 @@ public class DebugOverlayController : MonoBehaviour
             _roadsAPIDebugLine = $"Roads API: {message}";
         else if (step == "places")
             _placesAPIDebugLine = $"Places API: {message}";
-    }
-
-    // Called by PanelManager when test mode is toggled
-    public void ShowTestMode(bool isActive)
-    {
-        if (testModeStatusText == null) return;
-
-        testModeStatusText.text = isActive
-            ? "TEST MODE: ON (no real API calls)"
-            : "TEST MODE: OFF";
     }
 
     // Called by PanelManager.SetState on every state transition
