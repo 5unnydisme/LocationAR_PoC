@@ -10,9 +10,6 @@ public class ReportSubmissionManager : MonoBehaviour
 {
     private const string CV_API_URL = "https://product.airawat.org/cctv-analytics/predict";
 
-    [Tooltip("Supported models verbatim: animals, garbage, potholes, fallentrees, hoardings, roaddamage")]
-    [SerializeField] private string modelName = "potholes";
-
     [Tooltip("Reference to DebugOverlayController to see submission steps on device")]
     [SerializeField] private DebugOverlayController debugOverlayController;
 
@@ -21,6 +18,7 @@ public class ReportSubmissionManager : MonoBehaviour
         Texture2D image,
         LocationServiceManager.LocationSnapshot snapshot,
         string roadName,
+        string modelName,
         System.Action<CVAnalysisResult> onSuccess,
         System.Action<string> onFailure)
     {
@@ -30,13 +28,14 @@ public class ReportSubmissionManager : MonoBehaviour
             return;
         }
 
-        StartCoroutine(SendReportToAPI(image, snapshot, roadName, onSuccess, onFailure));
+        StartCoroutine(SendReportToAPI(image, snapshot, roadName, modelName, onSuccess, onFailure));
     }
 
     private IEnumerator SendReportToAPI(
         Texture2D image,
         LocationServiceManager.LocationSnapshot snapshot,
         string roadName,
+        string modelName,
         System.Action<CVAnalysisResult> onSuccess,
         System.Action<string> onFailure)
     {

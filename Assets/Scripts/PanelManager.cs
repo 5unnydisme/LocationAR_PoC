@@ -125,6 +125,8 @@ public class PanelManager : MonoBehaviour
     [Header("ImageCapture UI Elements - Snapshot Review")]
     [SerializeField] private GameObject capturedFramePanel; //Shown AFTER capture, contains the RawImage below
     [SerializeField] private RawImage previewRawImage; // displays the frozen Texture2D snapshot 
+    [Tooltip("Panel containing the issue-type dropdown shown during Preview.")]
+    [SerializeField] private GameObject modelDropdownPanel;
     [SerializeField] private GameObject analyseButton; //confirm and submit image for analysis
     [SerializeField] private GameObject retakeButton; //discards the captures image and goes back to live capture state
 
@@ -146,6 +148,7 @@ public class PanelManager : MonoBehaviour
     public SharedCameraManager sharedCameraManager; //Reference to the shared camera manager script to trigger the camera which will capture the image
     public LoadingCircleAnimation loadingCircleAnimation; //Reference to the loading circle script to trigger animation. 
     public ReportSubmissionManager submissionManager; //Reference to the report submission manager to trigger the report submission flow when SB's CV section is ready
+    public ModelDropdownController modelDropdownController; //Reference to model dropdown controller to read/reset selected issue type during Preview flow
     public CVResultPopulator cvResultPopulator; //Reference to the script that will populate the CV result panel with the data received from SB's CV analysis, this is separate from the PanelPopulator which is specifically for the location data from the JSON
     public GrievanceSubmissionManager grievanceSubmissionManager; //handles the POST to the grievance database
     #endregion
@@ -295,8 +298,10 @@ public class PanelManager : MonoBehaviour
 
             case ReportFlowState.Preview:
             capturedFramePanel.SetActive(true); 
+            if (modelDropdownPanel != null) modelDropdownPanel.SetActive(true);
+            modelDropdownController?.ResetSelection();
             previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
-            ShowButton(analyseButton, interactable:true); //Show the button to confirm and submit the image for CV analysis
+            ShowButton(analyseButton, interactable:false); //Starts locked until issue type is selected from dropdown
             ShowButton(retakeButton, interactable: true); //Show the retake button go back to live capture and discard the current image
             instructionpanel.SetActive(true); //Keep the instructions visible during to guide users for next steps 
             SetImageCaptureInstructionText("Review the captured image.\nTap Analyse to submit for analysis or Retake to try again.");
@@ -470,6 +475,13 @@ public class PanelManager : MonoBehaviour
 
     public void OnAnalyseButtonPressed()
     {
+        string modelName = modelDropdownController != null ? modelDropdownController.SelectedModelName : string.Empty;
+        if (string.IsNullOrEmpty(modelName))
+        {
+            debugOverlayController?.ShowCVAPIResult("[PanelManager] Analyse blocked: no Issue Type selected");
+            return;
+        }
+
         Texture2D image = sharedCameraManager?.GetPreviewImage();
         //When maps are locked (FullMock or CVLive), use the hardcoded stand-ins;
         LocationServiceManager.LocationSnapshot snapshot; 
@@ -495,7 +507,7 @@ public class PanelManager : MonoBehaviour
         }
 
         submissionManager.SubmitReport(
-            image, snapshot, roadName,
+            image, snapshot, roadName, modelName,
             onSuccess: (CVAnalysisResult result) => 
             {
                 if (result == null)
@@ -832,6 +844,7 @@ public class PanelManager : MonoBehaviour
     if (instructionpanel != null) instructionpanel.SetActive(false);
     if (captureSquare != null) captureSquare.SetActive(false);
     if(capturedFramePanel != null) capturedFramePanel.SetActive(false); 
+        if (modelDropdownPanel != null) modelDropdownPanel.SetActive(false);
     if (awaitingPanel != null) awaitingPanel.SetActive(false);
     if(reviewResultsPanel != null) reviewResultsPanel.SetActive(false);
     if(successSubmissionPanel != null) successSubmissionPanel.SetActive(false); // HACK: force-hide success panel when leaving report flow
