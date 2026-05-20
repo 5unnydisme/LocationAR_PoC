@@ -18,10 +18,47 @@ public class LocationServiceManager : MonoBehaviour
   [Tooltip("Desired accuracy in meters. Lower values = more precise but will use more battery. ")]
   [SerializeField] private float desiredAccuracyInMeters = 100f;
   [Tooltip("Minimum distance (meters) device must move before location updates")]
-  [SerializeField] private float updateDistanceInMeters = 5f;
+  [SerializeField] private float updateDistanceInMeters = 1f;
   [Tooltip ("Maximum time to wait for location service initialization")]
   [SerializeField] private float initalizationTimeoutSeconds = 20f;
-  #endregion
+  [Header("GPS Sampling + Accuracy Gate")]
+  [Tooltip("Number of unique GPS readings to consider in one request.")]
+  [SerializeField] private int sampleCount =4;
+
+  [Tooltip("Maximum seconds to spend collecting samples.")]
+  [SerializeField] private float sampleWindowSeconds =10f;
+
+  [Tooltip("Reject an individual sample above this horizontal accuracy (meters).")]
+  [SerializeField] private float perSampleMaxAccuracyMeters = 50f;
+
+  [Tooltip("Average horizontal accuracy must be <= this threshold to pass gate.")]
+  [SerializeField] private float gateThresholdMeters = 50f;
+
+  [Tooltip ("Minimum accepted samples required. 0 uses majority rule: sampleCount/2+1.")]
+  [SerializeField] private int minAcceptedSamples =2;
+
+  [Tooltip("If false, uses single-read legacy-compatible behavior for the callback overload.")]
+  [SerializeField] private bool enableSampleAveraging = true;
+
+    [Tooltip("If true, repeated timestamps can count as stationary observations when quality checks pass.")]
+    [SerializeField] private bool allowStationaryRepeatedTimestamps = true;
+
+    [Tooltip("Repeated stationary observations are allowed only after this many seconds in one sampling attempt.")]
+    [SerializeField] private float stationaryRepeatUnlockSeconds = 2f;
+
+    [Tooltip("Max horizontal accuracy (m) for counting repeated stationary observations.")]
+    [SerializeField] private float stationaryRepeatMaxAccuracyMeters = 35f;
+
+    [Tooltip("Max spread (m) allowed when counting repeated stationary observations.")]
+    [SerializeField] private float stationaryMaxSpreadMeters = 5f;
+
+    [Tooltip("Max reading age (seconds) allowed for repeated stationary observations.")]
+    [SerializeField] private float stationaryMaxReadingAgeSeconds = 10f;
+
+    [Header("Debug References")]
+    [Tooltip("Optional debug overlay used to mirror GPS sampling diagnostics on-device.")]
+    [SerializeField] private DebugOverlayController debugOverlayController;
+    #endregion
 
   #region Location Service State
   //Represents the current state of the location service 
@@ -33,6 +70,17 @@ public class LocationServiceManager : MonoBehaviour
         Failed //Failed to start or permission denied
     }
 
+    #region SampleResult
+    public enum SampleResult
+    {
+        Ok, 
+        InsufficientSamples, 
+        AllRejected,
+        Timeout
+    }
+
+    #endregion
+
     #region GPS Accuracy States
     public enum GPSAccuracyStatus
     {
@@ -40,6 +88,7 @@ public class LocationServiceManager : MonoBehaviour
         Fair, 
         Poor
     }
+
     #endregion
 
     //Current state of our location service
@@ -87,6 +136,12 @@ public struct LocationSnapshot
     // //Values above 10 meters are less accurate for AR applications
     // public float HorizontalAccuracy => _horizontalAccuracy;
 
+    public float LastSampleSpreadMeters => _lastSampleSpreadMeters;
+    public float LastSampleAverageAccuracyMeters => _lastSampleAvgAccuracyMeters;
+    public int LastAcceptedSampleCount => _lastAcceptedSampleCount;
+    public int LastTotalSampleCount => _lastTotalSampleCount;
+    public SampleResult LastSampleResult => _lastSampleResult;
+
     //Returns true if we have a valid GPS snapshot (read-only)
     public bool HasValidLocation => _hasValidLocation;
 
@@ -115,8 +170,19 @@ public struct LocationSnapshot
         }
     }
 
+    public void RequestLocation(System.Action<SampleResult, LocationSnapshot> onComplete)
+    {
+        StartCoroutine(RequestLocationWithSampling(onComplete));
+    }
     #endregion
+
 #region Private Methods (Internal Logic)
+    private float _lastSampleSpreadMeters = 0f;
+    private float _lastSampleAvgAccuracyMeters = 0f;
+    private int _lastAcceptedSampleCount = 0;
+    private int _lastTotalSampleCount = 0;
+    private SampleResult _lastSampleResult = SampleResult.Timeout;
+    private const float samplePollIntervalSeconds = 0.5f;
     private IEnumerator InitializeLocationService()
     {
         _currentState = LocationServiceState.Initializing;
@@ -229,6 +295,245 @@ public struct LocationSnapshot
             _hasValidLocation = true; 
         }
     }
+
+    private IEnumerator RequestLocationWithSampling(System.Action<SampleResult, LocationSnapshot> onComplete)
+    {
+        int targetSampleCount = Mathf.Max(1, sampleCount);
+        int requiredAccepted = ResolveRequiredAcceptedSamples(targetSampleCount);
+
+        // Ensure service is running before sampling starts.
+        if (_currentState == LocationServiceState.Disabled || _currentState == LocationServiceState.Failed)
+        {
+            yield return StartCoroutine(InitializeLocationService());
+        }
+
+        // If another request is currently initializing, wait for it to settle.
+        float settleWaitElapsed = 0f;
+        while (_currentState == LocationServiceState.Initializing && settleWaitElapsed < initalizationTimeoutSeconds)
+        {
+            yield return new WaitForSeconds(0.5f);
+            settleWaitElapsed += 0.5f;
+        }
+
+        float initWaitElapsed = 0f;
+        while (Input.location.status == LocationServiceStatus.Initializing && initWaitElapsed < initalizationTimeoutSeconds)
+        {
+            yield return new WaitForSeconds(0.5f);
+            initWaitElapsed += 0.5f;
+        } 
+
+        if (_currentState != LocationServiceState.Running || Input.location.status != LocationServiceStatus.Running)
+        {
+            CompleteSampling(onComplete, SampleResult.Timeout, default(LocationSnapshot), 0f, 0f, 0, 0);
+            yield break;
+        }
+
+        //Kill-switch: Single read be behavior for quick rollback and compatibility testing
+        if (!enableSampleAveraging)
+        {
+            LocationInfo one = Input.location.lastData;
+            long ageMs = ComputeAgeMs(one.timestamp);
+            Debug.Log($"[LocationServiceManager] sample i=1 lat={one.latitude:F6} lon={one.longitude:F6} acc={one.horizontalAccuracy:F1} ageMs={ageMs} accepted");
+
+            CaptureLocationSnapshot(); //mirrors today's behavior of storing a single snapshot
+            CompleteSampling(onComplete, SampleResult.Ok, _lastValidSnapshot, _lastValidSnapshot.horizontalAccuracy, 0f, 1, 1);
+            yield break;
+        }
+
+        List<LocationInfo> acceptedSamples = new List<LocationInfo>();
+        int uniqueSamplesSeen = 0;
+        float elapsed = 0f;
+        double lastTimestamp = double.MinValue; 
+        WaitForSeconds pollWait = new WaitForSeconds(samplePollIntervalSeconds);
+        float maxWindow = Mathf.Max(sampleWindowSeconds, samplePollIntervalSeconds); 
+
+        while (elapsed < maxWindow && acceptedSamples.Count < requiredAccepted && uniqueSamplesSeen < targetSampleCount)
+        {
+            LocationInfo sample = Input.location.lastData;
+            bool hasTimestamp = sample.timestamp > 0d;
+            bool repeatedTimestamp = hasTimestamp && System.Math.Abs(sample.timestamp - lastTimestamp) < 0.0001d;
+
+            if (repeatedTimestamp)
+            {
+                bool canCountAsStationary = false;
+                long repeatedAgeMs = ComputeAgeMs(sample.timestamp);
+                float projectedSpreadMeters = 0f;
+
+                if (allowStationaryRepeatedTimestamps)
+                {
+                    float maxAgeMs = stationaryMaxReadingAgeSeconds * 1000f;
+
+                    List<LocationInfo> projectedSamples = new List<LocationInfo>(acceptedSamples);
+                    projectedSamples.Add(sample);
+                    projectedSpreadMeters = ComputeSpreadMeters(projectedSamples);
+
+                    canCountAsStationary =
+                        elapsed >= stationaryRepeatUnlockSeconds &&
+                        sample.horizontalAccuracy <= stationaryRepeatMaxAccuracyMeters &&
+                        repeatedAgeMs <= maxAgeMs &&
+                        projectedSpreadMeters <= stationaryMaxSpreadMeters;
+                }
+
+                if (!canCountAsStationary)
+                {
+                    yield return pollWait;
+                    elapsed += samplePollIntervalSeconds;
+                    continue;
+                }
+
+                Debug.Log($"[LocationServiceManager] stationaryFallback accepted ageMs={repeatedAgeMs} spreadM={projectedSpreadMeters:F1} acc={sample.horizontalAccuracy:F1}");
+                debugOverlayController?.ShowGPSSamplingDebug($"stationary fallback accepted ageMs={repeatedAgeMs} spreadM={projectedSpreadMeters:F1} acc={sample.horizontalAccuracy:F1}");
+            }
+            
+            if (hasTimestamp)
+            {
+                lastTimestamp = sample.timestamp;
+            }
+
+            uniqueSamplesSeen++;
+
+            bool accepted = sample.horizontalAccuracy <= perSampleMaxAccuracyMeters;
+            long ageMs = ComputeAgeMs(sample.timestamp);
+
+            if (accepted)
+            {
+                acceptedSamples.Add(sample);
+                Debug.Log($"[LocationServiceManager] sample i={uniqueSamplesSeen} lat={sample.latitude:F6} lon={sample.longitude:F6} acc={sample.horizontalAccuracy:F1} ageMs={ageMs} accepted");
+            }
+            else
+            {
+                Debug.Log($"[LocationServiceManager] sample i={uniqueSamplesSeen} lat={sample.latitude:F6} lon={sample.longitude:F6} acc={sample.horizontalAccuracy:F1} ageMs={ageMs} rejected reason=accuracy>threshold");
+            }
+
+            if (acceptedSamples.Count < requiredAccepted && uniqueSamplesSeen < targetSampleCount)
+            {
+                yield return pollWait;
+                elapsed += samplePollIntervalSeconds;
+            }
+
+        }
+
+        if (uniqueSamplesSeen == 0)
+        {
+            CompleteSampling(onComplete, SampleResult.Timeout, default(LocationSnapshot), 0f, 0f, 0, 0);
+            yield break;
+        }
+
+        if (acceptedSamples.Count == 0)
+        {
+            CompleteSampling(onComplete, SampleResult.AllRejected, default(LocationSnapshot), 0f, 0f, 0, uniqueSamplesSeen);
+            yield break;
+        }
+
+        if (acceptedSamples.Count < requiredAccepted)
+        {
+            CompleteSampling(onComplete, SampleResult.InsufficientSamples, default(LocationSnapshot), 0f, 0f, acceptedSamples.Count, uniqueSamplesSeen);
+            yield break;
+        }
+
+        float avgLat = 0f;
+        float avgLon = 0f;
+        float avgAcc = 0f;
+
+        for (int i = 0; i < acceptedSamples.Count; i++)
+        {
+            avgLat += acceptedSamples[i].latitude;
+            avgLon += acceptedSamples[i].longitude;
+            avgAcc += acceptedSamples[i].horizontalAccuracy;
+        }
+
+        avgLat /= acceptedSamples.Count;
+        avgLon /= acceptedSamples.Count;
+        avgAcc /= acceptedSamples.Count;
+
+        float spreadMeters = ComputeSpreadMeters(acceptedSamples);
+        SampleResult gateResult = avgAcc <= gateThresholdMeters ? SampleResult.Ok : SampleResult.AllRejected;
+
+        if (gateResult == SampleResult.Ok)
+        {
+            _lastValidSnapshot = new LocationSnapshot(avgLat, avgLon, avgAcc);
+            _hasValidLocation = true;
+            CompleteSampling(onComplete, gateResult, _lastValidSnapshot, avgAcc, spreadMeters, acceptedSamples.Count, uniqueSamplesSeen);
+        }
+        else
+        {
+            CompleteSampling(onComplete, gateResult, default(LocationSnapshot), avgAcc, spreadMeters, acceptedSamples.Count, uniqueSamplesSeen);
+        }
+    }
+
+    private void CompleteSampling(
+        System.Action<SampleResult, LocationSnapshot> onComplete,
+        SampleResult result,
+        LocationSnapshot snapshot,
+        float avgAccuracy,
+        float spreadMeters,
+        int acceptedCount,
+        int totalCount)
+    {
+        _lastSampleResult = result;
+        _lastSampleSpreadMeters = spreadMeters;
+        _lastSampleAvgAccuracyMeters = avgAccuracy;
+        _lastAcceptedSampleCount = acceptedCount;
+        _lastTotalSampleCount = totalCount;
+
+        Debug.Log($"[LocationServiceManager] gate avgAcc={avgAccuracy:F1} spreadM={spreadMeters:F1} accepted={acceptedCount}/{totalCount} result={result}");
+
+        onComplete?.Invoke(result, snapshot);
+    }
+
+    private int ResolveRequiredAcceptedSamples(int targetSampleCount)
+    {
+        int majorityDefault = (targetSampleCount / 2) + 1;
+        int requested = minAcceptedSamples <= 0 ? majorityDefault : minAcceptedSamples;
+        return Mathf.Clamp(requested, 1, targetSampleCount);
+    }
+
+    private long ComputeAgeMs(double unixTimestampSeconds)
+    {
+        if (unixTimestampSeconds <= 0d)
+        {
+            return 0L;
+        }
+
+        long readingMs = (long)(unixTimestampSeconds * 1000d);
+        long nowMs = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        return System.Math.Max(0L, nowMs - readingMs);
+    }
+
+    private float ComputeSpreadMeters(List<LocationInfo> samples)
+    {
+        if (samples == null || samples.Count <= 1)
+        {
+            return 0f;
+        }
+
+        float minLat = float.MaxValue;
+        float maxLat = float.MinValue;
+        float minLon = float.MaxValue;
+        float maxLon = float.MinValue;
+        float meanLat = 0f;
+
+        for (int i = 0; i < samples.Count; i++)
+        {
+            float lat = samples[i].latitude;
+            float lon = samples[i].longitude;
+
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+            if (lon < minLon) minLon = lon;
+            if (lon > maxLon) maxLon = lon;
+
+            meanLat += lat;
+        }
+
+        meanLat /= samples.Count;
+
+        float latSpreadMeters = (maxLat - minLat) * 111320f;
+        float lonMetersPerDegree = 111320f * Mathf.Abs(Mathf.Cos(meanLat * Mathf.Deg2Rad));
+        float lonSpreadMeters = (maxLon - minLon) * lonMetersPerDegree;
+
+        return Mathf.Max(latSpreadMeters, lonSpreadMeters);
+    }
     #endregion
 
     //Clean up when game object is destroyed
@@ -247,9 +552,9 @@ public struct LocationSnapshot
         //we are using the GPS Accuracy enum here
         public GPSAccuracyStatus GetAccuracyDescription(float horizontalAccuracy)
     {
-        if (horizontalAccuracy <= 150f)
+        if (horizontalAccuracy <= 30f)
         return GPSAccuracyStatus.Good;
-        else if (horizontalAccuracy < 200f)
+        else if (horizontalAccuracy < 50f)
         return GPSAccuracyStatus.Fair;
         else
         return GPSAccuracyStatus.Poor;  

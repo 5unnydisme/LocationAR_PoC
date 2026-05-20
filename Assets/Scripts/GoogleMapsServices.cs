@@ -18,6 +18,7 @@ public class GoogleMapsServices : MonoBehaviour
     //Endpoint Base URLs, this is done so our lines in the API request code are cleaner and easier to read, we just append the parameters to these base URLs
     private const string NEAREST_ROADS_URL = "https://roads.googleapis.com/v1/nearestRoads";
     private const string PLACE_DETAILS_URL  = "https://maps.googleapis.com/maps/api/place/details/json";
+    private const int MAX_PLACE_ID_CANDIDATES = 3;
 
     //Stores the most recently resolved road name- readable by other scripts
     public string ActiveLocationName {get;private set;}="";
@@ -43,6 +44,15 @@ public class GoogleMapsServices : MonoBehaviour
     private class PlaceResult
     {
         public string name;
+        public string formatted_address;
+        public AddressComponent[] address_components;
+    }
+
+    [System.Serializable]
+    private class AddressComponent
+    {
+        public string long_name;
+        public string[] types;
     }
 
     [System.Serializable]
@@ -112,22 +122,60 @@ public class GoogleMapsServices : MonoBehaviour
                 yield break;
             }
 
-            //Take the first closes snapped road
-            string placeId = response.snappedPoints[0].placeId;
-            Debug.Log($"[GoogleMapsService] Step 1 complete - placeId: {placeId}");
-            debugOverlayController?.ShowAPIDebug("roads", $"placeId: {placeId}");
+            int candidateCount = Mathf.Min(MAX_PLACE_ID_CANDIDATES, response.snappedPoints.Length);
+            Debug.Log($"[GoogleMapsService] Step 1 complete - trying {candidateCount} placeId candidate(s)");
+            debugOverlayController?.ShowAPIDebug("roads", $"candidates: {candidateCount}");
 
-            //Move to Step 2 with the placeId we just got
-            yield return StartCoroutine(GetRoadNameFromPlaceIdCoroutine(placeId, onComplete));
+            for (int i = 0; i < candidateCount; i++)
+            {
+                string placeId = response.snappedPoints[i] != null ? response.snappedPoints[i].placeId : null;
+                if (string.IsNullOrEmpty(placeId))
+                {
+                    continue;
+                }
+
+                Debug.Log($"[GoogleMapsService] Trying candidate {i + 1}/{candidateCount} placeId: {placeId}");
+                debugOverlayController?.ShowAPIDebug("roads", $"candidate {i + 1}/{candidateCount}: {placeId}");
+
+                string resolvedRoadName = null;
+                bool hardFailure = false;
+
+                yield return StartCoroutine(TryGetRoadNameFromPlaceIdCoroutine(placeId, (roadName, hasHardFailure) =>
+                {
+                    resolvedRoadName = roadName;
+                    hardFailure = hasHardFailure;
+                }));
+
+                if (hardFailure)
+                {
+                    ActiveLocationName = "ERROR_NETWORK";
+                    onComplete?.Invoke(ActiveLocationName);
+                    yield break;
+                }
+
+                if (!string.IsNullOrEmpty(resolvedRoadName))
+                {
+                    ActiveLocationName = resolvedRoadName;
+                    onComplete?.Invoke(ActiveLocationName);
+                    yield break;
+                }
+            }
+
+            Debug.LogWarning("[GoogleMapsService] No usable road name found from candidate placeIds");
+            debugOverlayController?.ShowAPIDebug("places", "NO USABLE ROAD NAME after candidate attempts");
+            ActiveLocationName = "ERROR_NO_DATA";
+            onComplete?.Invoke(ActiveLocationName);
+            yield break;
         }
     }
 
-    // Step 2: Places API to get the road name from the placeId
-    private IEnumerator GetRoadNameFromPlaceIdCoroutine(string placeId, System.Action<string> onComplete)
+    // Step 2: Places API to get the road name from a placeId candidate.
+    // onComplete: roadNameOrNull, hardFailure
+    private IEnumerator TryGetRoadNameFromPlaceIdCoroutine(string placeId, System.Action<string, bool> onComplete)
     {
         //Build the Place Details request URL
-        //"fields=name" limits the response to just the name field (saves data, and quota?)
-        string url = $"{PLACE_DETAILS_URL}?place_id={placeId}&fields=name&key={apiKey}";
+        // Include route-capable data before fallback to plain place name.
+        string url = $"{PLACE_DETAILS_URL}?place_id={placeId}&fields=name,formatted_address,address_component&key={apiKey}";
         Debug.Log($"[GoogleMapsService] Step 2 - Calling Place Details API");
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
@@ -147,8 +195,7 @@ public class GoogleMapsServices : MonoBehaviour
             {
                 Debug.LogError($"[GoogleMapsService] Place Details API failed:{request.error}");
                 debugOverlayController?.ShowAPIDebug("places", $"FAILED: {request.error}");
-                ActiveLocationName = "ERROR_NETWORK"; // HTTP failure — no internet, quota, timeout
-                onComplete?.Invoke(ActiveLocationName);
+                onComplete?.Invoke(null, true);
                 yield break;
             }
 
@@ -157,24 +204,92 @@ public class GoogleMapsServices : MonoBehaviour
 
             PlaceDetailsResponse response = JsonUtility.FromJson<PlaceDetailsResponse>(json); //parsing the json data into the containers we set-up earlier
 
-            //Check the API status field- OK means success. this is different from our check with the Nearest Road
-            if (response == null || response.status != "OK" || response.result == null || string.IsNullOrEmpty(response.result.name))
+            //Check the API status field- OK means success.
+            if (response == null || response.status != "OK" || response.result == null)
             {
                 Debug.LogWarning($"[GoogleMapsService] Place Details returned no name. Status: {response?.status}");
                 debugOverlayController?.ShowAPIDebug("places", $"NO NAME - API status: {response?.status}");
-                ActiveLocationName = "ERROR_NO_DATA"; // API worked but Places returned no name for this placeId
-                onComplete?.Invoke(ActiveLocationName);
+                onComplete?.Invoke(null, false);
                 yield break;
             }
 
-            //If we reach these lines of code, it means we have a road name from the API 
-            ActiveLocationName = response.result.name;
-            Debug.Log($"[GoogleMapsService] Step 2 complete - Road Name:{ActiveLocationName}");
-            debugOverlayController?.ShowAPIDebug("places", $"Road: {ActiveLocationName}");
+            string source;
+            string resolvedRoadName = ExtractBestRoadLabel(response, out source);
+            if (string.IsNullOrEmpty(resolvedRoadName))
+            {
+                Debug.LogWarning($"[GoogleMapsService] Place Details had no usable road label. Status: {response.status}");
+                debugOverlayController?.ShowAPIDebug("places", $"NO USABLE LABEL - status: {response.status}");
+                onComplete?.Invoke(null, false);
+                yield break;
+            }
 
-            //Notify the caller the we're done and pass them the road name
-            onComplete?.Invoke(ActiveLocationName); 
+            Debug.Log($"[GoogleMapsService] Step 2 complete - Road Name: {resolvedRoadName} (source: {source})");
+            debugOverlayController?.ShowAPIDebug("places", $"Road: {resolvedRoadName} ({source})");
 
+            onComplete?.Invoke(resolvedRoadName, false);
         }
+    }
+
+    private string ExtractBestRoadLabel(PlaceDetailsResponse response, out string source)
+    {
+        source = "none";
+        if (response == null || response.result == null)
+        {
+            return null;
+        }
+
+        string routeName = ExtractRouteFromAddressComponents(response.result.address_components);
+        if (!string.IsNullOrEmpty(routeName))
+        {
+            source = "route";
+            return routeName;
+        }
+
+        if (!string.IsNullOrEmpty(response.result.name))
+        {
+            source = "name";
+            return response.result.name;
+        }
+
+        if (!string.IsNullOrEmpty(response.result.formatted_address))
+        {
+            source = "formatted_address";
+            int commaIndex = response.result.formatted_address.IndexOf(',');
+            if (commaIndex > 0)
+            {
+                return response.result.formatted_address.Substring(0, commaIndex).Trim();
+            }
+
+            return response.result.formatted_address.Trim();
+        }
+
+        return null;
+    }
+
+    private string ExtractRouteFromAddressComponents(AddressComponent[] components)
+    {
+        if (components == null)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < components.Length; i++)
+        {
+            AddressComponent component = components[i];
+            if (component == null || string.IsNullOrEmpty(component.long_name) || component.types == null)
+            {
+                continue;
+            }
+
+            for (int j = 0; j < component.types.Length; j++)
+            {
+                if (component.types[j] == "route")
+                {
+                    return component.long_name;
+                }
+            }
+        }
+
+        return null;
     }
 }

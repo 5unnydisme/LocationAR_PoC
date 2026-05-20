@@ -56,6 +56,22 @@ public class DebugOverlayController : MonoBehaviour
 
     [SerializeField] private PanelManager panelManager; //Reference to PanelManager to get state info for debugging
     [SerializeField] private TextMeshProUGUI testModeStatusText; //Shows whether we're in UI test mode or not, NO REAL API calls
+
+    [Header ("GPS Gate Debug")]
+    [Tooltip("Shows one-line gate summary sent by PanelManager after each check-in attempt")]
+    [SerializeField] private TextMeshProUGUI gpsGateResultText; 
+    
+    [Tooltip("Shows latest sample spread from LocationServiceManager")]
+    [SerializeField] private TextMeshProUGUI gpsSpreadText;
+
+    [Tooltip("Shows accepted/total samples from latest GPS gate attempt")]
+    [SerializeField] private TextMeshProUGUI gpsAcceptedSamplesText;
+
+    [Tooltip("Shows average horizontal accuracy used by latest gate attempt")]
+    [SerializeField] private TextMeshProUGUI gpsAverageAccuracyText;
+
+    [Tooltip("Shows stationary fallback sampling diagnostics from LocationServiceManager")]
+    [SerializeField] private TextMeshProUGUI gpsSamplingDebugText;
    #endregion
     
     #region Private Fields
@@ -65,8 +81,8 @@ public class DebugOverlayController : MonoBehaviour
     private bool isDebugPanelVisible = false; //Sets the Debug Panel to be inactive
     private string _roadsAPIDebugLine = "";  // set by GoogleMapsServices, Step 1 status
     private string _placesAPIDebugLine = ""; // set by GoogleMapsServices, Step 2 status
-
-    
+    private string _gpsGateLine = ""; // set by PanelManager after each check-in attempt, e.g. "result=Ok avgAcc=12.3 spread=3.1"
+    private string _gpsSamplingDebugLine = ""; // set by LocationServiceManager when stationary fallback accepts a repeated timestamp
 
     #endregion
 
@@ -164,6 +180,63 @@ public class DebugOverlayController : MonoBehaviour
                 ? _placesAPIDebugLine
                 : "Places API: not called yet";
         }
+
+        //Show the gpsGate Result 
+        if (gpsGateResultText !=null)
+        {
+            gpsGateResultText.text = !string.IsNullOrEmpty(_gpsGateLine)
+                ?$"GPS Gate: {_gpsGateLine}"
+                : $"GPS Gate: result={locationServiceManager.LastSampleResult}";
+        }
+
+        if (gpsSpreadText != null)
+        {
+            gpsSpreadText.text = string.Format("spread: {0:F1} m", locationServiceManager.LastSampleSpreadMeters);
+        }
+
+        if (gpsAcceptedSamplesText != null)
+        {
+            gpsAcceptedSamplesText.text = string.Format(
+                "accepted: {0}/{1}",
+                locationServiceManager.LastAcceptedSampleCount,
+                locationServiceManager.LastTotalSampleCount
+            );
+        }
+
+        if (gpsAverageAccuracyText != null)
+        {
+            gpsAverageAccuracyText.text = string.Format(
+                "avgAcc: {0:F1} m",
+                locationServiceManager.LastSampleAverageAccuracyMeters
+            );
+        }
+
+        if (gpsSamplingDebugText != null)
+        {
+            gpsSamplingDebugText.text = !string.IsNullOrEmpty(_gpsSamplingDebugLine)
+                ? $"GPS Sampling: {_gpsSamplingDebugLine}"
+                : "GPS Sampling: no stationary fallback accepted yet";
+        }
+    }
+
+    public void ShowGPSGate(string line)
+    {
+        _gpsGateLine = line;
+        if(gpsGateResultText == null) return;
+
+        gpsGateResultText.text = string.IsNullOrEmpty(line)
+        ? $"GPS Gate: result={locationServiceManager.LastSampleResult}"
+        : $"GPS Gate: {line}";
+    }
+
+    public void ShowGPSSamplingDebug(string line)
+    {
+        _gpsSamplingDebugLine = line;
+        if (gpsSamplingDebugText == null) return;
+
+        gpsSamplingDebugText.text = string.IsNullOrEmpty(line)
+            ? "GPS Sampling: no stationary fallback accepted yet"
+            : $"GPS Sampling: {line}";
     }
 //Display UI when GPS is working
     private void DisplayRunningState()

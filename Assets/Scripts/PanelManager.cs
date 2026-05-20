@@ -24,10 +24,12 @@ public class PanelManager : MonoBehaviour
     {
         Idle,
         Loading_Location,
+        Loading_LocationSampling,
         Loading_API, 
         Success_WithData,
         CaptureImage,
         Success_NoData,
+        Error_GPSAccuracy,
         Error 
     }
 
@@ -138,7 +140,7 @@ public class PanelManager : MonoBehaviour
     [SerializeField] private GameObject reviewResultsPanel; //Placeholder. Leave unassigned for now, later will write from received json analysed data
     [SerializeField] private GameObject successSubmissionPanel; //Placeholder. Leave unassigned for now, later will be the Complaint Lodged success panel
     [SerializeField] private GameObject submitGrievanceButton; // show in reviewresult, tapped to file the grievance
-    
+
     [Header("Script References")]
     public  DebugOverlayController debugOverlayController; 
     public LocationServiceManager locationServiceManager; 
@@ -231,6 +233,14 @@ public class PanelManager : MonoBehaviour
             SetStatusMessage("Getting your location...");
             break;
 
+            case UIState.Loading_LocationSampling:
+            logoScreen.SetActive(true); 
+            infoPanelGameObject.SetActive(true);
+            if (loadingSpinner != null) loadingSpinner.SetActive(true);
+            if(loadingCircleAnimation != null) loadingCircleAnimation.StartAnimation();
+            SetStatusMessage("Checking GPS accuracy...");
+            break;
+
             case UIState.Loading_API:
             logoScreen.SetActive(true); //Logo stays on until the infoPanel is populated with the json data
             infoPanelGameObject.SetActive(true); 
@@ -250,11 +260,18 @@ public class PanelManager : MonoBehaviour
             SetReportFlowState(ReportFlowState.LiveCapture); //Set the sub-state for the report flow to live capture, which will show the relevant UI elements for that phase
             break; 
             
-            case UIState.Success_NoData:
+            case UIState.Success_NoData: //TODO make this such that in the event there is a match without city data they can complain
             logoScreen.SetActive(true); //Stays on because we are revealing the name of infrastructure found, even if there is no data available for it
             infoPanelGameObject.SetActive(true); 
-            ShowButton(addInfoButton, interactable: true); //Add info button becomes interactable, this is future proofing for next stage of the app 
+            //ShowButton(addInfoButton, interactable: true); //Add info button becomes interactable, this is future proofing for next stage of the app 
             SetStatusMessage($"No information available for {currentRoadName}. Tap Add Info to contribute details about this location.");
+            break;
+
+            case UIState.Error_GPSAccuracy:
+            logoScreen.SetActive(true); //Keep the logo on
+            infoPanelGameObject.SetActive(true); 
+            ShowButton(retryButton, interactable: true);
+            SetStatusMessage("GPS signal too weak. Move to open sky and try again.");
             break;
 
             case UIState.Error:
@@ -368,26 +385,53 @@ public class PanelManager : MonoBehaviour
 
      public void onCheckInButtonPressed()
     {
-        //When maps are locked (FullMock or CVLive), skip GPS + Maps and simulate road resolution.
+        string modeLabel = isFullMock ? "FullMock": (isCVLive ? "CVLive" : "Real");
+        Debug.Log($"[PanelManager] checkIn start mode={modeLabel}");
+
         if (isMapsLocked)
         {
-            ShowButton(checkInButton, interactable:false); //Lock the button to prevent multiple presses, like real flow 
-            SetState(UIState.Loading_Location); //Show spinner + location status;
-            Invoke ("SimulateAPIResponse", 2f); //Skip GPS and map lookup
-            return;//once we hit return here, it will literally leave this method and move on...which is key in not making the API call
-        } 
+            ShowButton(checkInButton, interactable: false); //Disable the check-in button immediately to prevent multiple taps and API calls while we process the first tap
+            SetState (UIState.Loading_Location);
+            Invoke ("SimulateAPIResponse", 2f); //Simulate API response after 2 seconds, this will trigger the success state with data and show the Learn More button
+            return;
+        }
 
-        //REAL FLOW: only in Off mode 
-        if (locationServiceManager == null || googleMapsServices == null) return;
+        if (locationServiceManager == null || googleMapsServices == null)
+        {
+            SetState(UIState.Error);
+            return;
+        }
 
-        //Lock the button to prevent multiple presses while we get location and make API call
-        ShowButton(checkInButton, interactable: false); 
+        ShowButton(checkInButton, interactable: false);
+        StartLocationSamplingAndResolveRoad();
+    }
 
-        SetState(UIState.Loading_Location); //Update UI state to loading location
-        locationServiceManager.RequestLocation(); //Start getting location from LocationServiceManager script
+    private void StartLocationSamplingAndResolveRoad()
+    {
+        SetState(UIState.Loading_LocationSampling);
 
-        //Poll GPS and check every 2 seconds to see if we have a valid location, once we have that we trigger the API call 
-        Invoke("CheckGPSAndTriggerAPI", 2f); //Start checking after 2 seconds, gives GPS a moment to start up
+        locationServiceManager.RequestLocation((result, snapshot) =>
+        {
+            float spread = locationServiceManager != null ? locationServiceManager.LastSampleSpreadMeters : 0f;
+            string avgAccText = result == LocationServiceManager.SampleResult.Ok
+                ? snapshot.horizontalAccuracy.ToString("F1")
+                : "n/a";
+
+            string gateLine = $"result={result} avgAcc={avgAccText} spread={spread:F1}";
+            debugOverlayController?.ShowGPSGate(gateLine); 
+
+            if (result == LocationServiceManager.SampleResult.Ok)
+            {
+                Debug.Log($"[PanelManager] gpsGate {gateLine} → nextState=Loading_API");
+                SetState(UIState.Loading_API);
+                googleMapsServices.GetActiveLocationName(snapshot.latitude, snapshot.longitude, OnRoadNameReceived);
+                return;
+            }
+
+            Debug.Log($"[PanelManager] gpsGate {gateLine} → nextState=Error_GPSAccuracy");
+            SetState(UIState.Error_GPSAccuracy);
+        });
+    
     }
 
     //LearnMore button OnClick
@@ -526,6 +570,12 @@ public class PanelManager : MonoBehaviour
                 }
 
                 currentCVResult = result; //store so OnSubmitGrievanceButtonPressed can pass it to GrievanceSubmissionManager
+                //Force CV Card issue type to match drop-down selected model for consistency
+                if(!string.IsNullOrEmpty(modelName))
+                {
+                    result.defect_type = modelName;
+                }
+
                 cvResultPopulator.Populate(result, roadName);  
                 SetReportFlowState(ReportFlowState.ReviewResult); // fills the panel
             },
@@ -617,7 +667,14 @@ public class PanelManager : MonoBehaviour
 
         CVAnalysisResult fakeResult = BuildMockCVResult();
         currentCVResult = fakeResult; //Store the fake result so it cane be it can be submitted if user taps submit without retaking
-        cvResultPopulator.Populate(fakeResult, string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName);
+       
+       string selectedIssueType = modelDropdownController != null ? modelDropdownController.SelectedModelName : string.Empty;
+       if (!string.IsNullOrEmpty(selectedIssueType))
+       {
+           fakeResult.defect_type = selectedIssueType;
+       }
+
+       cvResultPopulator.Populate(fakeResult, string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName);
         SetReportFlowState(ReportFlowState.ReviewResult); 
     }
 
@@ -640,47 +697,29 @@ public class PanelManager : MonoBehaviour
     //Retry button OnClick, will restart the full flow 
     public void OnRetryButtonPressed()
     {
-       SetState(UIState.Idle); //When this button is pressed we go back to the beginning
+       switch (currentState)
+        {
+            case UIState.Error_GPSAccuracy:
+                Debug.Log("[PanelManager] retry from=Error_GPSAccuracy → Loading_LocationSampling");
+                if (locationServiceManager == null || googleMapsServices == null)
+                {
+                    SetState(UIState.Error);
+                    return;
+                }
+
+                StartLocationSamplingAndResolveRoad();
+                break;
+
+            default:
+            SetState(UIState.Idle);
+            break;
+        }
+
     }
 
     #endregion
 
-    #region GPS Polling - Auto API Trigger 
-    //Called 2s after the Check-In button is pressed. Keeps checking until GPS has a fix (validLocation) and then fires API
-    //Check-in button already disabled to prevent multiple calls 
-
-    private void CheckGPSAndTriggerAPI()
-    {
-            if (locationServiceManager == null)
-    {
-        SetState(UIState.Error);
-        return;
-    }
-
-    var svcState = locationServiceManager.State;
-    bool isReady = svcState == LocationServiceManager.LocationServiceState.Running
-                   && locationServiceManager.HasValidLocation;
-
-    if (isReady)
-    {
-        SetState(UIState.Loading_API);
-        LocationServiceManager.LocationSnapshot snap = locationServiceManager.LastLocationSnapshot;
-        googleMapsServices.GetActiveLocationName(snap.latitude, snap.longitude, OnRoadNameReceived);
-        return;
-    }
-
-    switch (svcState)
-         {
-        case LocationServiceManager.LocationServiceState.Running:
-        case LocationServiceManager.LocationServiceState.Initializing:
-            Invoke("CheckGPSAndTriggerAPI", 2f);
-            break;
-        default:
-            SetState(UIState.Error);
-            break;
-
-            } 
-        }
+    #region GPS + API Trigger
         //Method for simulating the API response when maps are locked by TestMode.
         private void SimulateAPIResponse()
         {
