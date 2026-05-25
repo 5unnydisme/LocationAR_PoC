@@ -3,7 +3,7 @@ using UnityEngine;
 public class LoadingCircleAnimation : MonoBehaviour
 {
     private RectTransform rectComponent;
-    private float rotateSpeed = 200f;
+    private float rotateSpeed = 150f;
 
     public void StartAnimation()
     {

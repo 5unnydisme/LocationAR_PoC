@@ -321,7 +321,7 @@ public class PanelManager : MonoBehaviour
             ShowButton(analyseButton, interactable:false); //Starts locked until issue type is selected from dropdown
             ShowButton(retakeButton, interactable: true); //Show the retake button go back to live capture and discard the current image
             instructionpanel.SetActive(true); //Keep the instructions visible during to guide users for next steps 
-            SetImageCaptureInstructionText("Review the captured image.\nTap Analyse to submit for analysis or Retake to try again.");
+            SetImageCaptureInstructionText("Review the captured image. Tap Analyse to submit for analysis or Retake to try again.");
             sharedCameraManager?.SuspendFeed(); //Set instructions for the next steps on sending image for analysis
             break; 
 
@@ -597,6 +597,13 @@ public class PanelManager : MonoBehaviour
                 return;
             }
 
+        Texture2D image = sharedCameraManager?.GetPreviewImage();
+        if (image == null)
+        {
+            debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] No captured image found for grievance submission.");
+            return;
+        }
+
         // Full Mock: keep[ entire backend flow fake (no grievance API call
         if (isFullMock)
         {
@@ -620,6 +627,7 @@ public class PanelManager : MonoBehaviour
         SetReportFlowState(ReportFlowState.SubmittingGrievance);
 
          grievanceSubmissionManager.SubmitGrievance(
+                image,
             currentCVResult,
             snapshot,
             roadName,

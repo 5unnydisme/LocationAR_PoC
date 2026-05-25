@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -14,13 +13,31 @@ public class GrievanceSubmissionManager : MonoBehaviour
     #region Inspector Configuration
     [Header("The full URL of the Grievance submission endpoint")]
     [Tooltip("The full URL of the grievance database endpoint.")]
-     private const string grievanceApiUrl = "http://35.154.241.163:8002/v1/ingestion/run"; 
-         
-    // HARDCODED for 200 SMOKE TEST — move to secrets.json post-demo
-    private const string apiKey = "1Diq7jeowJGTosFK4p4Q4j-bF92vtLTf8DW2gDEk9YI";
+    private const string grievanceApiUrl = "https://product.airawat.org/kmc-pgr/v1/ingestion/complaint";
 
-    [Tooltip("Prefix used to build each record's External ID sent with every grievance to identify the reports coming from the mobile app. A Unix timestamp is appended at submission time to keep IDs unique.")]
-    [SerializeField] private string externalId ="MA";
+    [Tooltip("X-API-Key header value required by the grievance API.")]
+    [SerializeField] private string grievanceApiKey = "1Diq7jeowJGTosFK4p4Q4j-bF92vtLTf8DW2gDEk9YI";
+
+    [Tooltip("Prefix used to build each complaint's external ID. A Unix timestamp is appended per submission to keep IDs unique.")]
+    [SerializeField] private string externalIdPrefix = "MA";
+
+    [Tooltip("Default complaint category when CV output is missing or empty.")]
+    [SerializeField] private string defaultCategory = "";
+
+    // [Tooltip("Optional department value expected by the backend.")]
+    // [SerializeField] private string defaultDepartment = "";
+
+    [Tooltip("Complaint status to send with every submission.")]
+    [SerializeField] private string defaultStatus = "Pending";
+
+    // [Tooltip("Optional ward value for submissions.")]
+    // [SerializeField] private string defaultWard = "";
+
+    // [Tooltip("Optional zone value for submissions.")]
+    // [SerializeField] private string defaultZone = "";
+
+    [Tooltip("JPEG quality used when encoding the complaint image (0-100).")]
+    [SerializeField] private int jpegQuality = 85;
 
     [Tooltip("Request timeout in seconds.")]
     [SerializeField] private int requestTimeoutSeconds = 30;
@@ -30,27 +47,9 @@ public class GrievanceSubmissionManager : MonoBehaviour
     [SerializeField] private DebugOverlayController debugOverlayController;
     #endregion
 
-    //DTO - Data Transfer Objects for the ingestion payload expected by the API
-    [System.Serializable]
-    public class IngestionRequest
-    {
-        public IngestionComplaintRecord[] records;
-    }
-
-    [System.Serializable]
-    public class IngestionComplaintRecord
-    {
-        public string external_id;
-        public string created_at;
-        public string updated_at;
-        public string category;
-        public string status;
-        public string zone;
-        public string ward;
-    }
-
     //Public entry point- called by PanelManager when the Submit button is pressed
     public void SubmitGrievance(
+        Texture2D image,
         CVAnalysisResult cvResult,
         LocationServiceManager.LocationSnapshot snapshot,
         string roadName,
@@ -58,16 +57,17 @@ public class GrievanceSubmissionManager : MonoBehaviour
         System.Action<string> onFailure)
 
     {
-        if (cvResult == null)
+        if (image == null)
         {
-            onFailure?.Invoke ("No CV analysis result to submit");
+            onFailure?.Invoke("No image to submit");
             return;
         }
 
-        StartCoroutine(SendGrievanceToAPI(cvResult, snapshot, roadName, onSuccess, onFailure));  
+        StartCoroutine(SendGrievanceToAPI(image, cvResult, snapshot, roadName, onSuccess, onFailure));
     }
 
     private IEnumerator SendGrievanceToAPI(
+        Texture2D image,
         CVAnalysisResult cvResult,
         LocationServiceManager.LocationSnapshot snapshot,
         string roadName, 
@@ -85,56 +85,87 @@ public class GrievanceSubmissionManager : MonoBehaviour
             yield break;
         }
 
-            debugOverlayController?.ShowGrievanceSubmitResult("[GrievanceSubmissionManager] Building grievance payload...");
-
-        //Step 2: Build record payload and wrap in top-level ingestion request shape
-        string createdAt = snapshot.timestamp.ToString("o");
-
-        IngestionComplaintRecord record = new IngestionComplaintRecord
+        if (string.IsNullOrEmpty(grievanceApiKey))
         {
-            external_id = $"{externalId}-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}",
-            created_at = createdAt,
-            updated_at = createdAt,
-            category = "Roads", // HARDCODED: no category source wired from app data yet
-            status = "Pending", // HARDCODED: no lifecycle/status source wired from app data yet
-            zone = "Zone 6", // HARDCODED: no zone mapping available from current app context
-            ward = "Vishnupuri-40" // HARDCODED: no ward mapping available from current app context
-        };
+            const string message = "Missing grievance API key in Inspector.";
+            debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] {message}");
+            onFailure?.Invoke(message);
+            yield break;
+        }
 
-        IngestionRequest requestPayload = new IngestionRequest
-        {
-            records = new[] { record }
-        };
+        debugOverlayController?.ShowGrievanceSubmitResult("[GrievanceSubmissionManager] Building grievance multipart payload...");
 
-        string json = JsonUtility.ToJson(requestPayload);
-        debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] Payload: {json}");
+        // Step 2: Build multipart form expected by /v1/ingestion/complaint
+        byte[] jpgBytes = image.EncodeToJPG(jpegQuality);
+        string externalId = $"{externalIdPrefix}-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+        string startedAt = snapshot.timestamp.ToUniversalTime().ToString("o");
+        string category = !string.IsNullOrEmpty(cvResult?.defect_type) ? cvResult.defect_type : defaultCategory; //TODO change this to the new string agreed with SB
 
-        byte[] bodyBytes = Encoding.UTF8.GetBytes(json); //Check if this is a helper method
+        WWWForm form = new WWWForm();
+        form.AddField("external_id", externalId);
+        form.AddField("category", category);
+        form.AddField("started_at", startedAt);
+        form.AddField("description", BuildDescription(cvResult));
+        form.AddField("status", defaultStatus);
+        form.AddField("latitude", snapshot.latitude.ToString("F6"));
+        form.AddField("longitude", snapshot.longitude.ToString("F6"));
+        form.AddField("accuracy", snapshot.horizontalAccuracy.ToString("F2"));
+        form.AddField("road_name", string.IsNullOrEmpty(roadName) ? "UNKNOWN" : roadName);
+
+        // if (!string.IsNullOrEmpty(cvResult?.defect_type))
+        // {
+        //     form.AddField("subcategory", cvResult.defect_type);
+        // }
+
+        // if (!string.IsNullOrEmpty(defaultDepartment))
+        // {
+        //     form.AddField("department", defaultDepartment);
+        // }
+
+        // if (!string.IsNullOrEmpty(defaultWard))
+        // {
+        //     form.AddField("ward", defaultWard);
+        // }
+
+        // if (!string.IsNullOrEmpty(defaultZone))
+        // {
+        //     form.AddField("zone", defaultZone);
+        // }
+
+        form.AddBinaryData("image", jpgBytes, "complaint.jpg", "image/jpeg");
+
         debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] Sending grievance POST...");
 
-        //Step 3: Send raw JSON POST request to API
-        //Use bare UnityWebRequest + UploadHandlerRaw so the API receives application/json.
-        using (UnityWebRequest request = new UnityWebRequest(grievanceApiUrl, "POST"))
+        //Step 3: Send multipart POST request
+        using (UnityWebRequest request = UnityWebRequest.Post(grievanceApiUrl, form))
         {
-            request.uploadHandler = new UploadHandlerRaw(bodyBytes);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("Accept", "application/json");
-            request.SetRequestHeader("X-API-Key", apiKey);
+            request.SetRequestHeader("X-API-Key", grievanceApiKey);
 
             request.timeout = requestTimeoutSeconds;
             yield return request.SendWebRequest();
 
             debugOverlayController?.ShowGrievanceSubmitResult(
             $"[GrievanceSubmissionManager] Response | Code:{request.responseCode} | Result: {request.result}");
+
+            string responseBody = request.downloadHandler?.text ?? "";
            
             //Step 4: Handle failure
             if (request.result != UnityWebRequest.Result.Success)
             {
                 string errorMsg = $"Submission failed: {request.error} (code{request.responseCode})";
                 debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] {errorMsg}");
-               debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] Response body: {request.downloadHandler?.text}");
+                debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] Response body: {responseBody}");
                 onFailure?.Invoke(errorMsg);
+                yield break;
+            }
+
+            if (request.responseCode < 200 || request.responseCode >= 300)
+            {
+                string errorMsg = $"Submission failed: HTTP {request.responseCode}";
+                debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] {errorMsg}");
+                debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] Response body: {responseBody}");
+                onFailure?.Invoke($"{errorMsg} | {responseBody}");
                 yield break;
             }
 
@@ -143,6 +174,18 @@ public class GrievanceSubmissionManager : MonoBehaviour
                 debugOverlayController?.ShowGrievanceSubmitResult("[GrievanceSubmissionManager] Grievance submitted successfully.");
             onSuccess?.Invoke();
         }
+    }
+
+    private string BuildDescription(CVAnalysisResult cvResult)
+    {
+        if (cvResult == null)
+        {
+            return "Complaint submitted from mobile app.";
+        }
+
+        string message = string.IsNullOrEmpty(cvResult.message) ? "Complaint submitted from mobile app." : cvResult.message;
+        string urgency = string.IsNullOrEmpty(cvResult.urgency) ? "unknown" : cvResult.urgency;
+        return $"{message} | urgency:{urgency} | confidence:{cvResult.confidence:F2}";
     }
 
 }
