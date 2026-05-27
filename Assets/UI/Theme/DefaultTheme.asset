@@ -60,12 +60,12 @@ MonoBehaviour:
   displaySemiboldMd:
     font: {fileID: 11400000, guid: f93ef44726fb344deb9384980ee17e7f, type: 2}
     size: 16
-    lineHeight: 22
+    lineHeight: 24
     color: {r: 0.1764706, g: 0.1764706, b: 0.1764706, a: 1}
   displayMediumLg:
     font: {fileID: 11400000, guid: 18db3b220d917460f9fb6a8dfb7dafcc, type: 2}
     size: 16
-    lineHeight: 24
+    lineHeight: 20
     color: {r: 0.29411766, g: 0.29411766, b: 0.29411766, a: 1}
   bodyRegularMd:
     font: {fileID: 11400000, guid: 1aa7d1c138c0a4e50b7c3892b3cb0b58, type: 2}
