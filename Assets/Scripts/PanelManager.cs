@@ -252,7 +252,7 @@ public class PanelManager : MonoBehaviour
             logoScreen.SetActive(true); //Stays true because we are revealing the name of infrastructure found
             infoPanelGameObject.SetActive(true); 
             ShowButton(learnMoreButton, interactable: true); //Learn More button becomes interactable, takes user to the info panel with more details about the location
-            SetStatusMessage($"Information available for {currentRoadName}. Tap Learn More to see details.");
+            SetStatusMessage($"Information available for {currentRoadName}. Tap on learn more button to see details.");
             break;
 
             case UIState.CaptureImage:
