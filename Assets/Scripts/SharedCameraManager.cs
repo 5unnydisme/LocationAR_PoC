@@ -384,8 +384,13 @@ public class SharedCameraManager : MonoBehaviour
         // We swap the RawImage rect dimensions so it fills the screen correctly after rotation.
         bool isPortraitRotation = (rotation == 90f || rotation == 270f);
 
-        float rectWidth  = isPortraitRotation ? Screen.height : Screen.width;
-        float rectHeight = isPortraitRotation ? Screen.width  : Screen.height;
+        // Use parent canvas-space size, not Screen pixels, to avoid zoom/crop when CanvasScaler is active.
+        RectTransform parentRect = previewRawImage.rectTransform.parent as RectTransform;
+        float canvasWidth = parentRect != null ? parentRect.rect.width : Screen.width;
+        float canvasHeight = parentRect != null ? parentRect.rect.height : Screen.height;
+
+        float rectWidth  = isPortraitRotation ? canvasHeight : canvasWidth;
+        float rectHeight = isPortraitRotation ? canvasWidth  : canvasHeight;
 
         // RectTransform controls 2D layout of a UI element.
         // sizeDelta sets width/height only when anchors are center/center (not stretch).

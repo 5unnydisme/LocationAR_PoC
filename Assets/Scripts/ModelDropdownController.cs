@@ -13,22 +13,26 @@ public class ModelDropdownController : MonoBehaviour
     [Tooltip("Analyse button that should only be enabled after a valid model is selected.")]
     [SerializeField] private Button analyseButton;
 
+    [Tooltip("Arrow RectTransform on the dropdown bar; rotated 180° when the list is open.")]
+    [SerializeField] private RectTransform dropdownArrow;
+
     [Tooltip("Optional debug overlay for mirroring selection logs on device.")]
     [SerializeField] private DebugOverlayController debugOverlayController;
     #endregion
 
     #region Private Constants
     private const string PlaceholderOption = "Select Issue Type";
+    private bool isOpen = false;
 
     private static readonly List<string> ModelOptions = new List<string>
     {
-        PlaceholderOption,
-        "animals",
-        "garbage",
-        "potholes",
-        "fallentrees",
-        "hoardings",
-        "roaddamage"
+        //PlaceholderOption,
+        "Animals",
+        "Garbage",
+        "Potholes",
+        "Fallen Trees",
+        "Hoardings",
+        "Road Damage"
     };
     #endregion
 
@@ -62,6 +66,11 @@ public class ModelDropdownController : MonoBehaviour
         SelectedModelName = string.Empty;
         analyseButton.interactable = false;
 
+        if (dropdownArrow != null)
+        {
+            dropdownArrow.localEulerAngles = Vector3.zero;
+        }
+
         Log("Dropdown initialized with placeholder and 6 issue models.");
     }
     #endregion
@@ -86,6 +95,22 @@ public class ModelDropdownController : MonoBehaviour
         SelectedModelName = modelDropdown.options[index].text;
         analyseButton.interactable = true;
         Log($"Model selected: {SelectedModelName}");
+    }
+
+    private void Update()
+    {
+        if (modelDropdown == null || dropdownArrow == null)
+        {
+            return;
+        }
+
+        // TMP_Dropdown spawns a child named "Dropdown List" while open.
+        bool openNow = modelDropdown.transform.Find("Dropdown List") != null;
+        if (openNow != isOpen)
+        {
+            isOpen = openNow;
+            dropdownArrow.localEulerAngles = new Vector3(0f, 0f, isOpen ? 180f : 0f);
+        }
     }
 
     public void ResetSelection()

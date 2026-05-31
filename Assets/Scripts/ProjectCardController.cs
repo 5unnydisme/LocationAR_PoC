@@ -5,6 +5,9 @@ public class ProjectCardController : MonoBehaviour
 {
     #region Inspector Configuration
     [Header("Project Card Text Fields")]
+    [Tooltip("Displays Project 1, Project 2, etc.")]
+    [SerializeField] private TMP_Text projectIndexTitle;
+
     [Tooltip("Displays the project work type as the card title.")]
     [SerializeField] private TMP_Text workTypeTitleText;
 
@@ -14,8 +17,14 @@ public class ProjectCardController : MonoBehaviour
     [Tooltip("Displays the combined date range chip in StartDate - EndDate format.")]
     [SerializeField] private TMP_Text dateRangeChipText;
 
+    [Tooltip("Contractor header")]
+    [SerializeField] private TMP_Text contractorHeaderText;
+
     [Tooltip("Displays contractor name.")]
     [SerializeField] private TMP_Text contractorText;
+
+    [Tooltip("Stretch header")]
+    [SerializeField] private TMP_Text stretchHeaderText;
 
     [Tooltip("Displays stretch description.")]
     [SerializeField] private TMP_Text stretchText;
@@ -31,8 +40,6 @@ public class ProjectCardController : MonoBehaviour
     #region Private Constants
     private const string NotAvailableText = "N/A";
     private const string DateSeparator = " - ";
-    private const string ContractorPrefix = "Contractor: ";
-    private const string StretchPrefix = "Stretch: ";
     #endregion
 
     #region Private State
@@ -47,7 +54,7 @@ public class ProjectCardController : MonoBehaviour
     #endregion
 
     #region Public API
-    public void Populate(ProjectRecord projectData)
+    public void Populate(ProjectRecord projectData, int cardIndex)
     {
         if (projectData == null)
         {
@@ -56,14 +63,17 @@ public class ProjectCardController : MonoBehaviour
             return;
         }
 
+        SetText(projectIndexTitle, BuildProjectIndexTitle(cardIndex));
         SetText(workTypeTitleText, GetValueOrFallback(projectData.workType));
         SetText(budgetChipText, GetValueOrFallback(projectData.budget));
         SetText(dateRangeChipText, BuildDateRange(projectData.startDate, projectData.endDate));
-        SetText(contractorText, BuildLabeledValue(ContractorPrefix, projectData.contractor));
-        SetText(stretchText, BuildLabeledValue(StretchPrefix, projectData.stretchDescription));
+
+        SetText(contractorHeaderText, "Contractor");
+        SetText(stretchHeaderText, "Stretch");
+        SetText(contractorText, GetValueOrFallback(projectData.contractor));
+        SetText(stretchText, GetValueOrFallback(projectData.stretchDescription));
     }
 
-    // Keep this method now so Inspector OnClick wiring can be added later without refactor.
     public void ToggleStretchExpanded()
     {
         SetStretchExpanded(!isStretchExpanded);
@@ -83,11 +93,17 @@ public class ProjectCardController : MonoBehaviour
     #region Private Helpers
     private void SetAllFallbackValues()
     {
+        SetText(projectIndexTitle, NotAvailableText);
         SetText(workTypeTitleText, NotAvailableText);
         SetText(budgetChipText, NotAvailableText);
         SetText(dateRangeChipText, BuildDateRange(null, null));
-        SetText(contractorText, BuildLabeledValue(ContractorPrefix, null));
-        SetText(stretchText, BuildLabeledValue(StretchPrefix, null));
+        SetText(contractorText, NotAvailableText);
+        SetText(stretchText, NotAvailableText);
+    }
+
+    private static string BuildProjectIndexTitle(int cardIndex)
+    {
+        return "Project " + (cardIndex + 1);
     }
 
     private static string GetValueOrFallback(string value)
@@ -100,11 +116,6 @@ public class ProjectCardController : MonoBehaviour
         string safeStart = GetValueOrFallback(startDate);
         string safeEnd = GetValueOrFallback(endDate);
         return safeStart + DateSeparator + safeEnd;
-    }
-
-    private static string BuildLabeledValue(string labelPrefix, string rawValue)
-    {
-        return labelPrefix + GetValueOrFallback(rawValue);
     }
 
     private static void SetText(TMP_Text targetText, string value)

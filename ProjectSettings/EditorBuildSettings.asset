@@ -5,9 +5,12 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/RevisedLocationResolver_BackUP.unity
     guid: b3c382c230d7e4e97b723c59ffc3bcf5
+  - enabled: 1
+    path: Assets/Scenes/RevisedLocationResolver_UIRefactor.unity
+    guid: 8fd954ea8a95d48aa99b632dd49865b0
   m_configObjects:
     UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: 6173c1ef87b0a4357a78cc7fd3d97de4, type: 2}
     com.unity.xr.arfoundation.simulation_settings: {fileID: 11400000, guid: 185bf074a3683492c9c9b8a1a08c4435, type: 2}

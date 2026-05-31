@@ -827,30 +827,29 @@ public class PanelManager : MonoBehaviour
     }
 
     private void InstantiateProjectCards(ProjectRecord[] projects)
+{
+    if (projectCardContentContainer == null || projectCardPrefab == null || projects == null)
     {
-        if (projectCardContentContainer == null || projectCardPrefab == null || projects == null)
-        {
-            return;
-        }
-
-        foreach (ProjectRecord project in projects)
-        {
-            GameObject cardObject = Instantiate(projectCardPrefab, projectCardContentContainer);
-            ProjectCardController cardController = cardObject.GetComponent<ProjectCardController>();
-
-            if (cardController != null)
-            {
-                cardController.Populate(project);
-            }
-            else
-            {
-                Debug.LogWarning("[PanelManager] Project card prefab is missing ProjectCardController.");
-            }
-        }
-
-        // Optional fallback if content height appears stale on specific devices:
-        // LayoutRebuilder.ForceRebuildLayoutImmediate(projectCardContentContainer as RectTransform);
+        return;
     }
+
+    for (int i = 0; i < projects.Length; i++)
+    {
+        ProjectRecord project = projects[i];
+        GameObject cardObject = Instantiate(projectCardPrefab, projectCardContentContainer);
+        ProjectCardController cardController = cardObject.GetComponent<ProjectCardController>();
+
+        if (cardController != null)
+        {
+            cardController.Populate(project, i);
+        }
+        else
+        {
+            Debug.LogWarning("[PanelManager] Project card prefab is missing ProjectCardController.");
+        }
+    }
+}
+
 
     //Hide all four Statebuttons before each state shows the correct on
     private void HideAllButtons()
