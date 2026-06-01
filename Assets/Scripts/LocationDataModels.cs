@@ -8,6 +8,8 @@ public class CVAnalysisResult //placeholder for now, will change based on SB
     public string urgency; //"low", "medium", "high"
     public float confidence; //94%
     public string message; 
+    public bool detected;
+    public string model_name;
 }
 [Serializable]
 public class InfrastructureDetails

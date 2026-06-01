@@ -37,10 +37,10 @@ public class MainUIFlowController : MonoBehaviour
     {
         LiveCapture, //Live camera feed, user can see capture button to take photo
         Preview, //Frozen frame shown to user for review
-        //AwaitingAnalysis, //Dummy loading state for now- CV netween goes here later
-        //ReviewResult, // This is the phase where the AI result is received - this is where we can have the review panel
-        // SubmittingGrievance, //POST to grievance database is happening, submit button is hidden, spinner showing
-        // Success //This is where submission is confirmed, we can success panel here
+        AwaitingAnalysis, //Dummy loading state for now- CV netween goes here later
+        ReviewResult, // This is the phase where the AI result is received - this is where we can have the review panel
+        SubmittingGrievance, //POST to grievance database is happening, submit button is hidden, spinner showing
+        Success //This is where submission is confirmed, we can success panel here
     }
 
     public enum TestMode
@@ -138,9 +138,9 @@ public class MainUIFlowController : MonoBehaviour
     // //how to add the logic to reuse the loading circle here, will have to copy over the state logic 
 
     // [Header("ImageCapture UI Elements - Future Elements")] //these are the things added after SB's CV integration is done 
-    // [SerializeField] private GameObject reviewResultsPanel; //Placeholder. Leave unassigned for now, later will write from received json analysed data
+    [SerializeField] private GameObject reviewResultsPanel; //Placeholder. Leave unassigned for now, later will write from received json analysed data
     // [SerializeField] private GameObject successSubmissionPanel; //Placeholder. Leave unassigned for now, later will be the Complaint Lodged success panel
-    //[SerializeField] private GameObject submitGrievanceButton; // show in reviewresult, tapped to file the grievance
+    [SerializeField] private GameObject submitGrievanceButton; // show in reviewresult, tapped to file the grievance
 
     [Header("Script References")]
     public  DebugOverlayController debugOverlayController; 
@@ -152,14 +152,14 @@ public class MainUIFlowController : MonoBehaviour
     public ReportSubmissionManager submissionManager; //Reference to the report submission manager to trigger the report submission flow when SB's CV section is ready
     public ModelDropdownController modelDropdownController; //Reference to model dropdown controller to read/reset selected issue type during Preview flow
     public CVResultPopulator cvResultPopulator; //Reference to the script that will populate the CV result panel with the data received from SB's CV analysis, this is separate from the PanelPopulator which is specifically for the location data from the JSON
-    //public GrievanceSubmissionManager grievanceSubmissionManager; //handles the POST to the grievance database
+    public GrievanceSubmissionManager grievanceSubmissionManager; //handles the POST to the grievance database
     #endregion
 
     #region Private State Fields
     private UIState currentState = UIState.Idle;
     private ReportFlowState currentReportFlowState = ReportFlowState.LiveCapture;
     private string currentRoadName = null; //Set when Success condition hit, otherwise remains clear
-    //private CVAnalysisResult currentCVResult = null; //Stores the CV result between ReviewResult and the submission
+    private CVAnalysisResult currentCVResult = null; //Stores the CV result between ReviewResult and the submission
     #endregion
 
     #region Unity Lifecycle Methods
@@ -285,10 +285,10 @@ public class MainUIFlowController : MonoBehaviour
         HideReportSubPanels(); //Cleares the panels specific to report flow substates
         HideAllButtons(); //clears all buttons including capture sub-buttons
     
-        // if (reportState != ReportFlowState.AwaitingAnalysis)
-        // {
-        //     CancelInvoke("OnAnalysisComplete");
-        // }
+        if (reportState != ReportFlowState.AwaitingAnalysis)
+        {
+            CancelInvoke("OnAnalysisComplete");
+        }
         
         switch(reportState)
         {
@@ -312,53 +312,53 @@ public class MainUIFlowController : MonoBehaviour
             sharedCameraManager?.SuspendFeed();
             break;
 
-            // case ReportFlowState.AwaitingAnalysis:
-            // sharedCameraManager?.SuspendFeed();
-            // capturedFramePanel.SetActive(true); 
-            // previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
-            // //instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
-            // SetImageCaptureInstructionText("Submitting image for analysis..."); //Set status message to let user know we are working on analysis
-            // if (loadingSpinner != null) loadingSpinner.SetActive(true); 
-            // if (loadingCircleAnimation != null) loadingCircleAnimation.StartAnimation(); //Trigger the loading circle animation when we start loading API call
+            case ReportFlowState.AwaitingAnalysis:
+            sharedCameraManager?.SuspendFeed();
+            capturedFramePanel.SetActive(true); 
+            previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
+            //instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
+            SetImageCaptureInstructionText("Submitting image for analysis..."); //Set status message to let user know we are working on analysis
+            //if (loadingSpinner != null) loadingSpinner.SetActive(true); 
+            //if (loadingCircleAnimation != null) loadingCircleAnimation.StartAnimation(); //Trigger the loading circle animation when we start loading API call
             
-            // //FullMock uses timer-driven fake CV result to keep demo flow going
-            // if (isFullMock)
-            //     {
-            //         Invoke("OnAnalysisComplete", 3f); //After 3 seconds, simulates fake CV results
-            //     }
-            //break;
+            //FullMock uses timer-driven fake CV result to keep demo flow going
+            if (isFullMock)
+                {
+                    Invoke("OnAnalysisComplete", 3f); //After 3 seconds, simulates fake CV results
+                }
+            break;
     
-            // case ReportFlowState.ReviewResult:
-            // sharedCameraManager?.SuspendFeed();
-            // capturedFramePanel.SetActive(true); 
-            // previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
-            // //instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
-            // //This is where we will show the results from the CV analysis 
-            // SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint"); //Placeholder, will replace with real results from the CV analysis later
-            // if (loadingSpinner != null) loadingSpinner.SetActive(false); 
-            // if(reviewResultsPanel != null) reviewResultsPanel.SetActive(true); //Show the panel with the CV results, this panel will be populated with the actual CV result data once we have that from SB
-            // ShowButton(submitGrievanceButton, interactable: true); //Submit button appears once the CV result comes in
-            // break;
+            case ReportFlowState.ReviewResult:
+            sharedCameraManager?.SuspendFeed();
+            capturedFramePanel.SetActive(true); 
+            previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
+            //instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
+            //This is where we will show the results from the CV analysis 
+            SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint"); //Placeholder, will replace with real results from the CV analysis later
+            //if (loadingSpinner != null) loadingSpinner.SetActive(false); 
+            if(reviewResultsPanel != null) reviewResultsPanel.SetActive(true); //Show the panel with the CV results, this panel will be populated with the actual CV result data once we have that from SB
+            ShowButton(submitGrievanceButton, interactable: true); //Submit button appears once the CV result comes in
+            break;
     
-            // case ReportFlowState.SubmittingGrievance:
-            // sharedCameraManager?.SuspendFeed();
-            // capturedFramePanel.SetActive(true); 
-            // previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
-            // if (reviewResultsPanel != null) reviewResultsPanel.SetActive(true); //Keep the result visible while submitting
-            // instructionpanel.SetActive(true);
-            // SetImageCaptureInstructionText("Filing grievance report...");
-            // // submitGrievanceButton intentionally NOT shown — HideAllButtons() already hid it
-            // break;
+            case ReportFlowState.SubmittingGrievance:
+            sharedCameraManager?.SuspendFeed();
+            capturedFramePanel.SetActive(true); 
+            previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
+            //if (reviewResultsPanel != null) reviewResultsPanel.SetActive(true); //Keep the result visible while submitting
+            //instructionpanel.SetActive(true);
+            SetImageCaptureInstructionText("Filing grievance report...");
+            ShowButton(submitGrievanceButton, interactable: false); //Submit button appears once the CV result comes in
+            break;
     
-            // case ReportFlowState.Success:
-            // sharedCameraManager?.ResumeFeed();  
-            // //Placeholder - wire up when submission backend is ready, this is where we will show the complaint lodged successfully
-            // instructionpanel.SetActive(true);
-            // SetImageCaptureInstructionText("Complaint submitted");
-            // if (loadingSpinner != null) loadingSpinner.SetActive(false);
-            // if (successSubmissionPanel != null) successSubmissionPanel.SetActive(true);
-            // ShowButton(backButton, interactable: true); //Show the back button to let user return to main page after seeing success message
-            // break;
+            case ReportFlowState.Success:
+            sharedCameraManager?.ResumeFeed();  
+            //Placeholder - wire up when submission backend is ready, this is where we will show the complaint lodged successfully
+            //instructionpanel.SetActive(true);
+            SetImageCaptureInstructionText("Complaint submitted");
+            if (loadingSpinner != null) loadingSpinner.SetActive(false);
+            //if (successSubmissionPanel != null) successSubmissionPanel.SetActive(true);
+            //ShowButton(backButton, interactable: true); //Show the back button to let user return to main page after seeing success message
+            break;
         }
     
         debugOverlayController?.ShowReportFlowState($"Report Issue Flow → {reportState}"); //Log the current sub-state of the report issue flow in the debug overlay for testing purposes
@@ -497,143 +497,147 @@ public class MainUIFlowController : MonoBehaviour
         CancelInvoke("OnAnalysisComplete");
 
         if (sharedCameraManager != null)
-        sharedCameraManager.ClearPreviewImage();
+        {
+            sharedCameraManager.ClearPreviewImage();
+        }
 
         if (previewRawImage != null)
-        previewRawImage.texture = null;
-        //currentCVResult = null; //Discard any previously stored result so stale data cannot be submitted
+        {
+            previewRawImage.texture = null;
+        }
+        currentCVResult = null; //Discard any previously stored result so stale data cannot be submitted
         cvResultPopulator?.Clear();
 
         SetReportFlowState(ReportFlowState.LiveCapture); //Go back to the live capture state to let user try taking the picture again
     }
 
-    // public void OnAnalyseButtonPressed()
-    // {
-    //     string modelName = modelDropdownController != null ? modelDropdownController.SelectedModelName : string.Empty;
-    //     if (string.IsNullOrEmpty(modelName))
-    //     {
-    //         debugOverlayController?.ShowCVAPIResult("[PanelManager] Analyse blocked: no Issue Type selected");
-    //         return;
-    //     }
+    public void OnAnalyseButtonPressed()
+    {
+        string modelName = modelDropdownController != null ? modelDropdownController.SelectedModelName : string.Empty;
+        if (string.IsNullOrEmpty(modelName))
+        {
+            debugOverlayController?.ShowCVAPIResult("[PanelManager] Analyse blocked: no Issue Type selected");
+            return;
+        }
 
-    //     Texture2D image = sharedCameraManager?.GetPreviewImage();
-    //     //When maps are locked (FullMock or CVLive), use the hardcoded stand-ins;
-    //     LocationServiceManager.LocationSnapshot snapshot; 
-    //     string roadName;
-    //     if (isMapsLocked)
-    //     {
-    //         snapshot = new LocationServiceManager.LocationSnapshot(26.515430f,80.235020f,5f); //Nursery GPS value
-    //         roadName = string.IsNullOrEmpty(currentRoadName)? testRoadName: currentRoadName; 
-    //     }
-    //     else
-    //     {
-    //         snapshot = locationServiceManager.LastLocationSnapshot;
-    //         roadName = googleMapsServices.ActiveLocationName;
-    //     }
+        Texture2D image = sharedCameraManager?.GetPreviewImage();
+        //When maps are locked (FullMock or CVLive), use the hardcoded stand-ins;
+        LocationServiceManager.LocationSnapshot snapshot; 
+        string roadName;
+        if (isMapsLocked)
+        {
+            snapshot = new LocationServiceManager.LocationSnapshot(26.515430f,80.235020f,5f); //Nursery GPS value
+            roadName = string.IsNullOrEmpty(currentRoadName)? testRoadName: currentRoadName; 
+        }
+        else
+        {
+            snapshot = locationServiceManager.LastLocationSnapshot;
+            roadName = googleMapsServices.ActiveLocationName;
+        }
 
-    //     SetReportFlowState(ReportFlowState.AwaitingAnalysis); 
+        SetReportFlowState(ReportFlowState.AwaitingAnalysis); 
 
-    //     //FullMock does not call CV APi. AwaitingAnalysis is already scheduled OnAnalysisComplete.
-    //     if (isFullMock)
-    //     {
-    //         debugOverlayController?.ShowCVAPIResult("[PanelManager] FullMock active. Skipping real CV call");
-    //         return;
-    //     }
+        //FullMock does not call CV APi. AwaitingAnalysis is already scheduled OnAnalysisComplete.
+        if (isFullMock)
+        {
+            debugOverlayController?.ShowCVAPIResult("[PanelManager] FullMock active. Skipping real CV call");
+            return;
+        }
 
-    //     submissionManager.SubmitReport(
-    //         image, snapshot, roadName, modelName,
-    //         onSuccess: (CVAnalysisResult result) => 
-    //         {
-    //             if (result == null)
-    //             {
-    //                 if (isCVLive)
-    //                 {
-    //                     debugOverlayController?.ShowCVAPIResult("[PanelManager] CVLive 200-OK smoke test returned null payload. Using mock result for UI flow");
-    //                     result = BuildMockCVResult(); //Builds a mock CV result to keep the demo flow intact
-    //                 }
-    //                 else
-    //                 {
-    //                     debugOverlayController?.ShowCVAPIResult("[PanelManager] CV returned null reference in Off mode.");
-    //                     SetReportFlowState (ReportFlowState.Preview); //Return to preview to let user try again, since we didn't get a valid result back from the CV API
-    //                     return;
-    //                 }
-    //             }
+        submissionManager.SubmitReport(
+            image, snapshot, roadName, modelName,
+            onSuccess: (CVAnalysisResult result) => 
+            {
+                if (result == null)
+                {
+                    if (isCVLive)
+                    {
+                        debugOverlayController?.ShowCVAPIResult("[PanelManager] CVLive 200-OK smoke test returned null payload. Using mock result for UI flow");
+                        result = BuildMockCVResult(); //Builds a mock CV result to keep the demo flow intact
+                    }
+                    else
+                    {
+                        debugOverlayController?.ShowCVAPIResult("[PanelManager] CV returned null reference in Off mode.");
+                        SetReportFlowState (ReportFlowState.Preview); //Return to preview to let user try again, since we didn't get a valid result back from the CV API
+                        return;
+                    }
+                }
 
-    //             currentCVResult = result; //store so OnSubmitGrievanceButtonPressed can pass it to GrievanceSubmissionManager
-    //             //Force CV Card issue type to match drop-down selected model for consistency
-    //             if(!string.IsNullOrEmpty(modelName))
-    //             {
-    //                 result.defect_type = modelName;
-    //             }
+                currentCVResult = result; //store so OnSubmitGrievanceButtonPressed can pass it to GrievanceSubmissionManager
+                //Force CV Card issue type to match drop-down selected model for consistency
+                if(!string.IsNullOrEmpty(modelName))
+                {
+                    result.defect_type = modelName;
+                }
 
-    //             cvResultPopulator.Populate(result, roadName);  
-    //             SetReportFlowState(ReportFlowState.ReviewResult); // fills the panel
-    //         },
+                cvResultPopulator.Populate(result, roadName);  
+                SetReportFlowState(ReportFlowState.ReviewResult); // fills the panel
+            },
 
-    //         onFailure: (string error) =>
-    //         {
-    //             debugOverlayController?.ShowCVAPIResult($"CV Analysis Failed: {error}");
-    //             SetReportFlowState(ReportFlowState.Preview); // let user retry
-    //         }
-    //     );
+            onFailure: (string error) =>
+            {
+                debugOverlayController?.ShowCVAPIResult($"CV Analysis Failed: {error}");
+                SetReportFlowState(ReportFlowState.Preview); // let user retry
+            }
+        );
 
-    // }
+    }
 
-    // public void OnSubmitGrievanceButtonPressed()
-    // {
-    //     if (grievanceSubmissionManager == null)//Main null check 
-    //         {
-    //             debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] GrievanceSubmissionManager is not assigned in the Inspector");
-    //             return;
-    //         }
+    public void OnSubmitGrievanceButtonPressed()
+    {
+        if (grievanceSubmissionManager == null)//Main null check 
+            {
+                debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] GrievanceSubmissionManager is not assigned in the Inspector");
+                return;
+            }
 
-    //     Texture2D image = sharedCameraManager?.GetPreviewImage();
-    //     if (image == null)
-    //     {
-    //         debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] No captured image found for grievance submission.");
-    //         return;
-    //     }
+        Texture2D image = sharedCameraManager?.GetPreviewImage();
+        if (image == null)
+        {
+            debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] No captured image found for grievance submission.");
+            return;
+        }
 
-    //     // Full Mock: keep[ entire backend flow fake (no grievance API call
-    //     if (isFullMock)
-    //     {
-    //         debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] FullMock active. Skipping real API call");
-    //         return;
-    //     }
+        // Full Mock: keep[ entire backend flow fake (no grievance API call
+        if (isFullMock)
+        {
+            debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] FullMock active. Skipping real API call");
+            return;
+        }
 
-    //     LocationServiceManager.LocationSnapshot snapshot;
-    //     string roadName; 
+        LocationServiceManager.LocationSnapshot snapshot;
+        string roadName; 
 
-    //     if (isMapsLocked)
-    //     {
-    //         snapshot = new LocationServiceManager.LocationSnapshot(26.515430f,80.235020f,5f); //Nursery GPS value
-    //         roadName = string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName;  
-    //     }
-    //     else
-    //     {
-    //         snapshot = locationServiceManager.LastLocationSnapshot;
-    //         roadName = googleMapsServices.ActiveLocationName;
-    //     }
-    //     SetReportFlowState(ReportFlowState.SubmittingGrievance);
+        if (isMapsLocked)
+        {
+            snapshot = new LocationServiceManager.LocationSnapshot(26.515430f,80.235020f,5f); //Nursery GPS value
+            roadName = string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName;  
+        }
+        else
+        {
+            snapshot = locationServiceManager.LastLocationSnapshot;
+            roadName = googleMapsServices.ActiveLocationName;
+        }
+        SetReportFlowState(ReportFlowState.SubmittingGrievance);
 
-    //      grievanceSubmissionManager.SubmitGrievance(
-    //             image,
-    //         currentCVResult,
-    //         snapshot,
-    //         roadName,
-    //         onSuccess: () =>
-    //         {
-    //             currentCVResult = null; // clear after successful submission
-    //             SetReportFlowState(ReportFlowState.Success);
-    //         },
-    //         onFailure: (string error) =>
-    //         {
-    //             debugOverlayController?.ShowGrievanceSubmitResult($"[PanelManager] Grievance submission failed: {error}");
-    //             Debug.LogError($"[PanelManager] Grievance submission failed: {error}");
-    //             SetReportFlowState(ReportFlowState.ReviewResult); // return user to result so they can retry
-    //         }
-    //     );
-    // }
+         grievanceSubmissionManager.SubmitGrievance(
+                image,
+            currentCVResult,
+            snapshot,
+            roadName,
+            onSuccess: () =>
+            {
+                currentCVResult = null; // clear after successful submission
+                SetReportFlowState(ReportFlowState.Success);
+            },
+            onFailure: (string error) =>
+            {
+                debugOverlayController?.ShowGrievanceSubmitResult($"[PanelManager] Grievance submission failed: {error}");
+                Debug.LogError($"[PanelManager] Grievance submission failed: {error}");
+                SetReportFlowState(ReportFlowState.ReviewResult); // return user to result so they can retry
+            }
+        );
+    }
 
     // public void OnBackButtonPressed()
     // {
@@ -654,37 +658,38 @@ public class MainUIFlowController : MonoBehaviour
     // }
 
     //Dummy method after Awaiting Analysis timer is hit,replace with real CV response handling once SB's API is live
-    // Simulates a CVAnalysisResult so the full ReviewResult flow can be tested end-to-end
+    //Simulates a CVAnalysisResult so the full ReviewResult flow can be tested end-to-end
+    private void OnAnalysisComplete()
+    {
+        if (!isFullMock)
+        {
+            return;
+        }
 
-    // private void OnAnalysisComplete()
-    // {
-    //     if (!isFullMock)
-    //     {
-    //         return;
-    //     }
-
-    //     CVAnalysisResult fakeResult = BuildMockCVResult();
-    //     currentCVResult = fakeResult; //Store the fake result so it cane be it can be submitted if user taps submit without retaking
+        CVAnalysisResult fakeResult = BuildMockCVResult();
+        currentCVResult = fakeResult; //Store the fake result so it cane be it can be submitted if user taps submit without retaking
        
-    //    string selectedIssueType = modelDropdownController != null ? modelDropdownController.SelectedModelName : string.Empty;
-    //    if (!string.IsNullOrEmpty(selectedIssueType))
-    //    {
-    //        fakeResult.defect_type = selectedIssueType;
-    //    }
+       string selectedIssueType = modelDropdownController != null ? modelDropdownController.SelectedModelName : string.Empty;
+       if (!string.IsNullOrEmpty(selectedIssueType))
+       {
+           fakeResult.defect_type = selectedIssueType;
+       }
 
-    //    cvResultPopulator.Populate(fakeResult, string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName);
-    //     SetReportFlowState(ReportFlowState.ReviewResult); 
-    // }
+       cvResultPopulator.Populate(fakeResult, string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName);
+        SetReportFlowState(ReportFlowState.ReviewResult); 
+    }
 
-    // private CVAnalysisResult BuildMockCVResult()
-    // {
-    //     return new CVAnalysisResult
-    //     {
-    //         defect_type = "Pothole",
-    //         confidence = 0.92f,
-    //         message = "Large pothole detected, needs immediate attention for repair."
-    //     };
-    // }
+    private CVAnalysisResult BuildMockCVResult()
+    {
+        return new CVAnalysisResult
+        {
+            defect_type = "Pothole",
+            detected = true,
+            model_name = "potholes",
+            //confidence = 0.92f,
+            //message = "Large pothole detected, needs immediate attention for repair."
+        };
+    }
 
 
     //Retry button OnClick, will restart the full flow 
@@ -887,7 +892,7 @@ public class MainUIFlowController : MonoBehaviour
         if (captureButton != null) captureButton.SetActive(false);
         if (analyseButton != null) analyseButton.SetActive(false); 
         if (retakeButton != null) retakeButton.SetActive(false);
-        // if(submitGrievanceButton != null) submitGrievanceButton.SetActive(false);
+        if(submitGrievanceButton != null) submitGrievanceButton.SetActive(false);
     }
 
     //Show a button and set its interactability
@@ -915,7 +920,7 @@ public class MainUIFlowController : MonoBehaviour
     if(capturedFramePanel != null) capturedFramePanel.SetActive(false); 
     if (modelDropdownPanel != null) modelDropdownPanel.SetActive(false);
     // if (awaitingPanel != null) awaitingPanel.SetActive(false);
-    // if(reviewResultsPanel != null) reviewResultsPanel.SetActive(false);
+    if(reviewResultsPanel != null) reviewResultsPanel.SetActive(false);
     // if(successSubmissionPanel != null) successSubmissionPanel.SetActive(false); // HACK: force-hide success panel when leaving report flow
 }
     #endregion

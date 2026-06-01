@@ -26,7 +26,7 @@ public class ModelDropdownController : MonoBehaviour
 
     private static readonly List<string> ModelOptions = new List<string>
     {
-        //PlaceholderOption,
+        PlaceholderOption,
         "Animals",
         "Garbage",
         "Potholes",
@@ -71,7 +71,7 @@ public class ModelDropdownController : MonoBehaviour
             dropdownArrow.localEulerAngles = Vector3.zero;
         }
 
-        Log("Dropdown initialized with placeholder and 6 issue models.");
+        Log("Dropdown initialized with 1 placeholder and 6 issue models.");
     }
     #endregion
 
@@ -84,7 +84,7 @@ public class ModelDropdownController : MonoBehaviour
             return;
         }
 
-        if (index <= 0 || index >= modelDropdown.options.Count)
+        if (index < 0 || index >= modelDropdown.options.Count)
         {
             SelectedModelName = string.Empty;
             analyseButton.interactable = false;
@@ -92,9 +92,14 @@ public class ModelDropdownController : MonoBehaviour
             return;
         }
 
-        SelectedModelName = modelDropdown.options[index].text;
-        analyseButton.interactable = true;
-        Log($"Model selected: {SelectedModelName}");
+        string selectedText = modelDropdown.options[index].text;
+        bool isPlaceholder = selectedText == PlaceholderOption;
+
+        SelectedModelName = isPlaceholder ? string.Empty : selectedText;
+        analyseButton.interactable = !isPlaceholder;
+        Log(isPlaceholder
+            ? "Placeholder selected. Analyse disabled."
+            : $"Model selected: {SelectedModelName}");
     }
 
     private void Update()

@@ -8,39 +8,36 @@ public class CVResultPopulator : MonoBehaviour
 {
     #region Inspector Configuration
     [Header("CV Result Card Fields")]
-    [Tooltip("Card title: road name (for example, Curzon Road).")]
+    [Tooltip("Card title: [Road Name] Issue Report.")]
     [SerializeField] private TMP_Text roadNameTitleText;
 
-    [Tooltip("Chip line: issue type (for example, Issue Type: Pothole).")]
+    [Tooltip("Static section header text object for issue type label.")]
+    [SerializeField] private TMP_Text issueTypeHeaderText;
+
+    [Tooltip("Issue type line: selected model from dropdown (for example, Pothole).")]
     [SerializeField] private TMP_Text issueTypeChipText;
 
-    [Tooltip("Line under title/chips: confidence text (for example, Detection Confidence: 95%).")]
-    [SerializeField] private TMP_Text confidenceLineText;
+    [Tooltip("Static section header text object for grievance label.")]
+    [SerializeField] private TMP_Text grievanceHeaderText;
 
-    [Tooltip("Main body line: grievance/summary message.")]
+    [Tooltip("Status line: [Issue Type] Detected or [Issue Type] Not Detected.")]
+    [SerializeField] private TMP_Text statusLineText;
+
+    [Tooltip("Main body line: [Issue Type] detected/not detected at [Road Name] at [Timestamp].")]
     [SerializeField] private TMP_Text grievanceLineText;
+
+    [Tooltip("Location manager used for existing snapshot timestamp.")]
+    [SerializeField] private LocationServiceManager locationServiceManager;
 
     [Tooltip("Icon shown on the left of the card.")]
     [SerializeField] private Image iconImage;
 
-    [Header("Fallback Display Values")]
-    [Tooltip("Shown when road name is missing.")]
-    [SerializeField] private string unknownRoadFallback = "Unknown Road";
+    [Header("CV Result Card Header Labels")]
+    [Tooltip("Displayed text for issue type header label.")]
+    [SerializeField] private string issueTypeHeaderLabel = "Issue Type";
 
-    [Tooltip("Shown when defect type is missing.")]
-    [SerializeField] private string unknownIssueFallback = "Unknown";
-
-    [Tooltip("Shown when summary message is missing.")]
-    [SerializeField] private string emptyMessageFallback = "";
-
-    [Tooltip("Prefix for issue type line.")]
-    [SerializeField] private string issueTypePrefix = "Issue Type: ";
-
-    [Tooltip("Prefix for confidence line.")]
-    [SerializeField] private string confidencePrefix = "Detection Confidence: ";
-
-    [Tooltip("Prefix for summary line.")]
-    [SerializeField] private string grievancePrefix = "Grievance: ";
+    [Tooltip("Displayed text for grievance header label.")]
+    [SerializeField] private string grievanceHeaderLabel = "Grievance";
 
     [Tooltip("Optional icon used when SetIcon receives null.")]
     [SerializeField] private Sprite fallbackIcon;
@@ -74,15 +71,19 @@ public class CVResultPopulator : MonoBehaviour
 
         cachedRoadName = Sanitize(roadNameFromContext);
 
-        string roadValue = string.IsNullOrEmpty(cachedRoadName) ? unknownRoadFallback : cachedRoadName;
-        string issueValue = string.IsNullOrEmpty(data.defect_type) ? unknownIssueFallback : data.defect_type.Trim();
-        float confidencePercent = NormalizeConfidenceToPercent(data.confidence);
-        string messageValue = string.IsNullOrEmpty(data.message) ? emptyMessageFallback : data.message.Trim();
+        string roadValue = cachedRoadName;
+        string issueValue = Sanitize(data.defect_type);
+        bool isDetected = data.detected;
+        string statusText = isDetected ? "Detected" : "Not Detected";
+        string grievanceVerb = isDetected ? "detected" : "not detected";
+        string timestampValue = locationServiceManager.LastLocationSnapshot.timestamp.ToString("yyyy-MM-dd HH:mm");
 
-        SetText(roadNameTitleText, roadValue);
-        SetText(issueTypeChipText, issueTypePrefix + issueValue);
-        SetText(confidenceLineText, confidencePrefix + Mathf.RoundToInt(confidencePercent) + "%");
-        SetText(grievanceLineText, grievancePrefix + messageValue);
+        SetText(issueTypeHeaderText, issueTypeHeaderLabel);
+        SetText(grievanceHeaderText, grievanceHeaderLabel);
+        SetText(roadNameTitleText, roadValue + " Issue Report");
+        SetText(issueTypeChipText, issueValue);
+        SetText(statusLineText, issueValue + " " + statusText);
+        SetText(grievanceLineText, issueValue + " " + grievanceVerb + " at " + roadValue + " at " + timestampValue + ".");
     }
 
     // Optional runtime icon swap if you decide to drive icon per defect type later.
@@ -99,10 +100,12 @@ public class CVResultPopulator : MonoBehaviour
     // Clears stale values before a new analysis cycle.
     public void Clear()
     {
-        SetText(roadNameTitleText, unknownRoadFallback);
-        SetText(issueTypeChipText, issueTypePrefix + unknownIssueFallback);
-        SetText(confidenceLineText, confidencePrefix + "0%");
-        SetText(grievanceLineText, grievancePrefix + emptyMessageFallback);
+        SetText(issueTypeHeaderText, issueTypeHeaderLabel);
+        SetText(grievanceHeaderText, grievanceHeaderLabel);
+        SetText(roadNameTitleText, string.Empty);
+        SetText(issueTypeChipText, string.Empty);
+        SetText(statusLineText, string.Empty);
+        SetText(grievanceLineText, string.Empty);
 
         if (iconImage != null && fallbackIcon != null)
         {
@@ -125,17 +128,6 @@ public class CVResultPopulator : MonoBehaviour
     private static string Sanitize(string input)
     {
         return string.IsNullOrEmpty(input) ? string.Empty : input.Trim();
-    }
-
-    // Supports either 0..1 or 0..100 confidence payloads.
-    private static float NormalizeConfidenceToPercent(float rawConfidence)
-    {
-        if (rawConfidence <= 1f)
-        {
-            return Mathf.Clamp01(rawConfidence) * 100f;
-        }
-
-        return Mathf.Clamp(rawConfidence, 0f, 100f);
     }
     #endregion
 }
