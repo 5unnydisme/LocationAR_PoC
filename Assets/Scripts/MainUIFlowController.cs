@@ -153,6 +153,7 @@ public class MainUIFlowController : MonoBehaviour
     public ModelDropdownController modelDropdownController; //Reference to model dropdown controller to read/reset selected issue type during Preview flow
     public CVResultPopulator cvResultPopulator; //Reference to the script that will populate the CV result panel with the data received from SB's CV analysis, this is separate from the PanelPopulator which is specifically for the location data from the JSON
     public GrievanceSubmissionManager grievanceSubmissionManager; //handles the POST to the grievance database
+    [SerializeField] private FlowDebugOverlay flowDebugOverlay;
     #endregion
 
     #region Private State Fields
@@ -185,9 +186,10 @@ public class MainUIFlowController : MonoBehaviour
 
     private void SetupInitialUI()
     {
-        //HideAllPanels(); //Needed for hiding the logo panel 
+        HideAllPanels(); //Needed for hiding the logo panel 
         if (loadingSpinner != null) loadingSpinner.SetActive(false); //Ensures that the spinner is hidden at the beginning
         logoScreen.SetActive(true); 
+        if (PanelActionCardPrefab != null) PanelActionCardPrefab.SetActive(true); //Show the main action card panel which will be the base for showing the status messages and buttons in the Idle state
         SetState(UIState.Idle); //Set initial state to Idle
         debugOverlayController?.ShowTestMode(testMode.ToString()); //Update the debug overlay if it exists
     }
@@ -197,7 +199,8 @@ public class MainUIFlowController : MonoBehaviour
     // All ReportFlowState logic is commented out for this refactor session.
     public void SetState(UIState newState, string roadName = null)
     {
-        currentState = newState; 
+        currentState = newState;
+        flowDebugOverlay?.ShowUIState(newState.ToString()); 
 
         //Keep roadname for the two success states, and clear it for the others 
         if ((newState == UIState.Success_WithData || newState == UIState.Success_NoData) && !string.IsNullOrEmpty(roadName))
@@ -334,17 +337,26 @@ public class MainUIFlowController : MonoBehaviour
             previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
             //instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
             //This is where we will show the results from the CV analysis 
-            SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint"); //Placeholder, will replace with real results from the CV analysis later
+            bool canSubmit = currentCVResult != null && currentCVResult.detected;
+            if (canSubmit)
+            {
+                SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint"); //Placeholder, will replace with real results from the CV analysis later
+            }
+            else
+            {
+                SetImageCaptureInstructionText("Issue type not detected. Retake photo again and choose matching issue type.");
+            }
             //if (loadingSpinner != null) loadingSpinner.SetActive(false); 
-            if(reviewResultsPanel != null) reviewResultsPanel.SetActive(true); //Show the panel with the CV results, this panel will be populated with the actual CV result data once we have that from SB
-            ShowButton(submitGrievanceButton, interactable: true); //Submit button appears once the CV result comes in
+            if (reviewResultsPanel != null && !reviewResultsPanel.activeSelf) reviewResultsPanel.SetActive(true); //Keep active if already visible to avoid unnecessary relayout churn.
+            ShowButton(retakeButton, interactable: true);
+            ShowButton(submitGrievanceButton, interactable: canSubmit); //Submit button is visible but disabled when issue is not detected.
             break;
     
             case ReportFlowState.SubmittingGrievance:
             sharedCameraManager?.SuspendFeed();
             capturedFramePanel.SetActive(true); 
             previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
-            //if (reviewResultsPanel != null) reviewResultsPanel.SetActive(true); //Keep the result visible while submitting
+            if (reviewResultsPanel != null) reviewResultsPanel.SetActive(true); //Keep the result visible while submitting
             //instructionpanel.SetActive(true);
             SetImageCaptureInstructionText("Filing grievance report...");
             ShowButton(submitGrievanceButton, interactable: false); //Submit button appears once the CV result comes in
@@ -362,6 +374,7 @@ public class MainUIFlowController : MonoBehaviour
         }
     
         debugOverlayController?.ShowReportFlowState($"Report Issue Flow → {reportState}"); //Log the current sub-state of the report issue flow in the debug overlay for testing purposes
+        flowDebugOverlay?.ShowReportFlowState(reportState.ToString());
     
     }
     
@@ -507,6 +520,7 @@ public class MainUIFlowController : MonoBehaviour
         }
         currentCVResult = null; //Discard any previously stored result so stale data cannot be submitted
         cvResultPopulator?.Clear();
+        modelDropdownController?.ResetSelection();
 
         SetReportFlowState(ReportFlowState.LiveCapture); //Go back to the live capture state to let user try taking the picture again
     }
@@ -517,6 +531,15 @@ public class MainUIFlowController : MonoBehaviour
         if (string.IsNullOrEmpty(modelName))
         {
             debugOverlayController?.ShowCVAPIResult("[PanelManager] Analyse blocked: no Issue Type selected");
+            flowDebugOverlay?.MarkAnalyseFailed();
+            return;
+        }
+
+        if (submissionManager == null)
+        {
+            debugOverlayController?.ShowCVAPIResult("[PanelManager] ReportSubmissionManager is not assigned in the Inspector");
+            flowDebugOverlay?.MarkAnalyseFailed();
+            SetReportFlowState(ReportFlowState.Preview);
             return;
         }
 
@@ -535,51 +558,56 @@ public class MainUIFlowController : MonoBehaviour
             roadName = googleMapsServices.ActiveLocationName;
         }
 
-        SetReportFlowState(ReportFlowState.AwaitingAnalysis); 
+        SetReportFlowState(ReportFlowState.AwaitingAnalysis);
+        flowDebugOverlay?.MarkAnalyseStarted(); 
 
         //FullMock does not call CV APi. AwaitingAnalysis is already scheduled OnAnalysisComplete.
         if (isFullMock)
         {
             debugOverlayController?.ShowCVAPIResult("[PanelManager] FullMock active. Skipping real CV call");
+            flowDebugOverlay?.MarkAnalyseSuccess("FullMock");
             return;
         }
 
         submissionManager.SubmitReport(
-            image, snapshot, roadName, modelName,
-            onSuccess: (CVAnalysisResult result) => 
+        image, snapshot, roadName, modelName,
+        onSuccess: (CVAnalysisResult result, string responseCode) =>
+        {
+            flowDebugOverlay?.MarkAnalyseSuccess(responseCode);
+
+            if (result == null)
             {
-                if (result == null)
+                if (isCVLive)
                 {
-                    if (isCVLive)
-                    {
-                        debugOverlayController?.ShowCVAPIResult("[PanelManager] CVLive 200-OK smoke test returned null payload. Using mock result for UI flow");
-                        result = BuildMockCVResult(); //Builds a mock CV result to keep the demo flow intact
-                    }
-                    else
-                    {
-                        debugOverlayController?.ShowCVAPIResult("[PanelManager] CV returned null reference in Off mode.");
-                        SetReportFlowState (ReportFlowState.Preview); //Return to preview to let user try again, since we didn't get a valid result back from the CV API
-                        return;
-                    }
+                debugOverlayController?.ShowCVAPIResult("[MainUIFlowController] CVLive 200-OK smoke test returned null payload. Using mock result for UI flow");
+                result = BuildMockCVResult();
                 }
-
-                currentCVResult = result; //store so OnSubmitGrievanceButtonPressed can pass it to GrievanceSubmissionManager
-                //Force CV Card issue type to match drop-down selected model for consistency
-                if(!string.IsNullOrEmpty(modelName))
+            else
                 {
-                    result.defect_type = modelName;
+                debugOverlayController?.ShowCVAPIResult("[MainUIFlowController] CV callback fired but payload was null. Returning to Preview.");
+                flowDebugOverlay?.MarkAnalyseFailed();
+                SetReportFlowState(ReportFlowState.Preview);
+                return;
                 }
-
-                cvResultPopulator.Populate(result, roadName);  
-                SetReportFlowState(ReportFlowState.ReviewResult); // fills the panel
-            },
-
-            onFailure: (string error) =>
-            {
-                debugOverlayController?.ShowCVAPIResult($"CV Analysis Failed: {error}");
-                SetReportFlowState(ReportFlowState.Preview); // let user retry
             }
-        );
+
+            currentCVResult = result;
+                if (!string.IsNullOrEmpty(modelName))
+            {
+            result.defect_type = modelName;
+            }
+
+        SetReportFlowState(ReportFlowState.ReviewResult);
+        cvResultPopulator.Populate(result, roadName);
+    },
+
+    onFailure: (string error) =>
+    {
+        debugOverlayController?.ShowCVAPIResult("CV Analysis Failed: " + error);
+        flowDebugOverlay?.MarkAnalyseFailed(error);
+        SetReportFlowState(ReportFlowState.Preview);
+    }
+);
 
     }
 
@@ -588,6 +616,7 @@ public class MainUIFlowController : MonoBehaviour
         if (grievanceSubmissionManager == null)//Main null check 
             {
                 debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] GrievanceSubmissionManager is not assigned in the Inspector");
+                flowDebugOverlay?.MarkSubmitFailed();
                 return;
             }
 
@@ -595,6 +624,7 @@ public class MainUIFlowController : MonoBehaviour
         if (image == null)
         {
             debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] No captured image found for grievance submission.");
+            flowDebugOverlay?.MarkSubmitFailed();
             return;
         }
 
@@ -602,6 +632,7 @@ public class MainUIFlowController : MonoBehaviour
         if (isFullMock)
         {
             debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] FullMock active. Skipping real API call");
+            flowDebugOverlay?.MarkSubmitSuccess("FullMock");
             return;
         }
 
@@ -619,20 +650,24 @@ public class MainUIFlowController : MonoBehaviour
             roadName = googleMapsServices.ActiveLocationName;
         }
         SetReportFlowState(ReportFlowState.SubmittingGrievance);
+        flowDebugOverlay?.MarkSubmitStarted();
 
          grievanceSubmissionManager.SubmitGrievance(
                 image,
             currentCVResult,
             snapshot,
             roadName,
-            onSuccess: () =>
+            onSuccess: (string responseCode) =>
             {
+                flowDebugOverlay?.MarkSubmitSuccess(responseCode);
                 currentCVResult = null; // clear after successful submission
                 SetReportFlowState(ReportFlowState.Success);
             },
+
             onFailure: (string error) =>
             {
                 debugOverlayController?.ShowGrievanceSubmitResult($"[PanelManager] Grievance submission failed: {error}");
+                flowDebugOverlay?.MarkSubmitFailed(error);
                 Debug.LogError($"[PanelManager] Grievance submission failed: {error}");
                 SetReportFlowState(ReportFlowState.ReviewResult); // return user to result so they can retry
             }
@@ -675,8 +710,9 @@ public class MainUIFlowController : MonoBehaviour
            fakeResult.defect_type = selectedIssueType;
        }
 
+        // Activate ReviewResult first so first-time layout measures on an active hierarchy.
+        SetReportFlowState(ReportFlowState.ReviewResult);
        cvResultPopulator.Populate(fakeResult, string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName);
-        SetReportFlowState(ReportFlowState.ReviewResult); 
     }
 
     private CVAnalysisResult BuildMockCVResult()

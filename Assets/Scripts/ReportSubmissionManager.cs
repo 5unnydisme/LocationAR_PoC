@@ -19,7 +19,7 @@ public class ReportSubmissionManager : MonoBehaviour
         LocationServiceManager.LocationSnapshot snapshot,
         string roadName,
         string modelName,
-        System.Action<CVAnalysisResult> onSuccess,
+        System.Action<CVAnalysisResult, string> onSuccess,
         System.Action<string> onFailure)
     {
         if (image == null)
@@ -36,7 +36,7 @@ public class ReportSubmissionManager : MonoBehaviour
         LocationServiceManager.LocationSnapshot snapshot,
         string roadName,
         string modelName,
-        System.Action<CVAnalysisResult> onSuccess,
+        System.Action<CVAnalysisResult, string> onSuccess,
         System.Action<string> onFailure)
     {
         // Step 1: Encode the Texture2D into a JPG byte array
@@ -92,17 +92,19 @@ public class ReportSubmissionManager : MonoBehaviour
                 request.result == UnityWebRequest.Result.DataProcessingError)
             {
                 //(a) Transport failure - request.error is meaningful here, it contains the error message (e.g. "No internet connection", "TLS handshake failed", "Request timed out")
-                debugOverlayController?.ShowCVAPIResult($"Network error: {request.error}");
-                onFailure?.Invoke($"Network error: {request.error}");
+                string errorMsg = $"Network/Data error | Code: {request.responseCode} | Result: {request.result} | Error: {request.error}";
+                debugOverlayController?.ShowCVAPIResult(errorMsg);
+                onFailure?.Invoke(errorMsg);
                 yield break;
             }
 
             if (request.responseCode != 200)
             {
                 //HTTP non-200 - log the response body so the 422 validation details are visible
+                string errorMsg = $"HTTP error | Code: {request.responseCode} | Result: {request.result} | Error: {request.error}";
                 debugOverlayController?.ShowCVAPIResult(
-                    $"HTTP {request.responseCode} | Body: {responseBody}");
-                onFailure?.Invoke($"HTTP {request.responseCode}: {responseBody}");
+                    $"{errorMsg} | Body: {responseBody}");
+                onFailure?.Invoke($"{errorMsg} | Body: {responseBody}");
                 yield break;
             }
 
@@ -117,7 +119,7 @@ public class ReportSubmissionManager : MonoBehaviour
             // field names are confirmed. Drop the null fallback in PanelManager at the same time.
             Debug.Log($"[ReportSubmissionManager] CV 200 OK — raw body: {responseBody}");
             debugOverlayController?.ShowCVAPIResult($"200 OK | bytes={responseBody.Length}");
-            onSuccess?.Invoke(null);
+            onSuccess?.Invoke(null, request.responseCode.ToString());
         }
     }
 }

@@ -75,15 +75,19 @@ public class CVResultPopulator : MonoBehaviour
         string issueValue = Sanitize(data.defect_type);
         bool isDetected = data.detected;
         string statusText = isDetected ? "Detected" : "Not Detected";
-        string grievanceVerb = isDetected ? "detected" : "not detected";
         string timestampValue = locationServiceManager.LastLocationSnapshot.timestamp.ToString("yyyy-MM-dd HH:mm");
+        string grievanceLineValue = isDetected
+            ? issueValue + " detected at " + roadValue + " at " + timestampValue + "."
+            : "Retake photo again and choose matching issue type.";
 
         SetText(issueTypeHeaderText, issueTypeHeaderLabel);
         SetText(grievanceHeaderText, grievanceHeaderLabel);
         SetText(roadNameTitleText, roadValue + " Issue Report");
         SetText(issueTypeChipText, issueValue);
         SetText(statusLineText, issueValue + " " + statusText);
-        SetText(grievanceLineText, issueValue + " " + grievanceVerb + " at " + roadValue + " at " + timestampValue + ".");
+        SetText(grievanceLineText, grievanceLineValue);
+
+        ForceLayoutRefresh();
     }
 
     // Optional runtime icon swap if you decide to drive icon per defect type later.
@@ -115,6 +119,20 @@ public class CVResultPopulator : MonoBehaviour
     #endregion
 
     #region Private Helpers
+    private void ForceLayoutRefresh()
+    {
+        Canvas.ForceUpdateCanvases();
+
+        RectTransform node = grievanceLineText != null ? grievanceLineText.rectTransform : null;
+        while (node != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(node);
+            node = node.parent as RectTransform;
+        }
+
+        Canvas.ForceUpdateCanvases();
+    }
+
     private static void SetText(TMP_Text targetText, string value)
     {
         if (targetText == null)

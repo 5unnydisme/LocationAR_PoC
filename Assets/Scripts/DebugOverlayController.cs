@@ -54,7 +54,7 @@ public class DebugOverlayController : MonoBehaviour
     [Tooltip("Shows submit-button/grievance POST debug messages only")]
     [SerializeField] private TextMeshProUGUI grievanceSubmitDebugText;
 
-    [SerializeField] private PanelManager panelManager; //Reference to PanelManager to get state info for debugging
+    //[SerializeField] private PanelManager panelManager; //Reference to PanelManager to get state info for debugging
     [SerializeField] private TextMeshProUGUI testModeStatusText; //Shows whether we're in UI test mode or not, NO REAL API calls
 
     [Header ("GPS Gate Debug")]

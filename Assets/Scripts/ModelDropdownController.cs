@@ -27,12 +27,12 @@ public class ModelDropdownController : MonoBehaviour
     private static readonly List<string> ModelOptions = new List<string>
     {
         PlaceholderOption,
-        "Animals",
-        "Garbage",
-        "Potholes",
-        "Fallen Trees",
-        "Hoardings",
-        "Road Damage"
+        "animals",
+        "garbage",
+        "potholes",
+        "fallen trees",
+        "hoardings",
+        "road damage"
     };
     #endregion
 

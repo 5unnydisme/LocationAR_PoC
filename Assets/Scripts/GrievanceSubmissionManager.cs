@@ -53,7 +53,7 @@ public class GrievanceSubmissionManager : MonoBehaviour
         CVAnalysisResult cvResult,
         LocationServiceManager.LocationSnapshot snapshot,
         string roadName,
-        System.Action onSuccess,
+        System.Action<string> onSuccess,
         System.Action<string> onFailure)
 
     {
@@ -71,7 +71,7 @@ public class GrievanceSubmissionManager : MonoBehaviour
         CVAnalysisResult cvResult,
         LocationServiceManager.LocationSnapshot snapshot,
         string roadName, 
-        System.Action onSuccess, 
+        System.Action<string> onSuccess, 
         System.Action<string> onFailure)
     {
         //Step 1: Offline check
@@ -172,7 +172,7 @@ public class GrievanceSubmissionManager : MonoBehaviour
             //Step 5: Success
             //No POCO parsing yet- treat any 200 as success until API contact is confirmed
                 debugOverlayController?.ShowGrievanceSubmitResult("[GrievanceSubmissionManager] Grievance submitted successfully.");
-            onSuccess?.Invoke();
+            onSuccess?.Invoke(request.responseCode.ToString());
         }
     }
 
