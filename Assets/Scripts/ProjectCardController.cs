@@ -39,6 +39,8 @@ public class ProjectCardController : MonoBehaviour
 
     #region Private Constants
     private const string NotAvailableText = "N/A";
+    private const string BudgetPrefix= "Budget: ";
+    private const string DateRangePrefix = "Timeline: ";
     private const string DateSeparator = " - ";
     #endregion
 
@@ -65,8 +67,8 @@ public class ProjectCardController : MonoBehaviour
 
         SetText(projectIndexTitle, BuildProjectIndexTitle(cardIndex));
         SetText(workTypeTitleText, GetValueOrFallback(projectData.workType));
-        SetText(budgetChipText, GetValueOrFallback(projectData.budget));
-        SetText(dateRangeChipText, BuildDateRange(projectData.startDate, projectData.endDate));
+        SetText(budgetChipText, BudgetPrefix + GetValueOrFallback(projectData.budget));
+        SetText(dateRangeChipText, DateRangePrefix + BuildDateRange(projectData.startDate, projectData.endDate));
 
         SetText(contractorHeaderText, "Contractor");
         SetText(stretchHeaderText, "Stretch");
@@ -95,8 +97,8 @@ public class ProjectCardController : MonoBehaviour
     {
         SetText(projectIndexTitle, NotAvailableText);
         SetText(workTypeTitleText, NotAvailableText);
-        SetText(budgetChipText, NotAvailableText);
-        SetText(dateRangeChipText, BuildDateRange(null, null));
+        SetText(budgetChipText, BudgetPrefix + NotAvailableText);
+        SetText(dateRangeChipText, DateRangePrefix + BuildDateRange(null, null));
         SetText(contractorText, NotAvailableText);
         SetText(stretchText, NotAvailableText);
     }

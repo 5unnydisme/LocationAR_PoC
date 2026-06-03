@@ -20,24 +20,38 @@ public class ModelDropdownController : MonoBehaviour
     [SerializeField] private DebugOverlayController debugOverlayController;
     #endregion
 
-    #region Private Constants
-    private const string PlaceholderOption = "Select Issue Type";
-    private bool isOpen = false;
+    private bool isOpen;
+    private const string PlaceholderOption = "Select issue type";
 
-    private static readonly List<string> ModelOptions = new List<string>
+    #region Private Constants
+    private class ModelOption
     {
-        PlaceholderOption,
-        "animals",
-        "garbage",
-        "potholes",
-        "fallen trees",
-        "hoardings",
-        "road damage"
+        public string displayName;
+        public string apiValue;       
+
+        public ModelOption(string displayName, string apiValue)
+        {
+            this.displayName = displayName; 
+            this.apiValue = apiValue;
+        }
+    }
+
+    private static readonly List<ModelOption> ModelOptions = new List<ModelOption>
+    {
+        new ModelOption(PlaceholderOption, string.Empty),
+        new ModelOption("Animals", "animals"),
+        new ModelOption("Garbage", "garbage"),
+        new ModelOption("Potholes", "potholes"),
+        new ModelOption("Fallen Trees", "fallentrees"),
+        new ModelOption("Hoardings", "hoardings"), 
+        new ModelOption("Road Damage", "roaddamage")
     };
+    
     #endregion
 
     #region Public State
-    public string SelectedModelName { get; private set; } = string.Empty;
+    public string SelectedModelName {get; private set;} = string.Empty; //API value
+    public string SelectedModelDisplayName {get;private set;} = string.Empty; //UI label
     #endregion
 
     #region Unity Lifecycle
@@ -60,18 +74,18 @@ public class ModelDropdownController : MonoBehaviour
         }
 
         modelDropdown.ClearOptions();
-        modelDropdown.AddOptions(ModelOptions);
 
+        List<string> displayOptions = new List<string> (ModelOptions.Count);
+        for (int i = 0; i < ModelOptions.Count; i++)
+        {
+            displayOptions.Add(ModelOptions[i].displayName);
+        }
+        modelDropdown.AddOptions(displayOptions);
+        
         modelDropdown.SetValueWithoutNotify(0);
         SelectedModelName = string.Empty;
+        SelectedModelDisplayName = string.Empty;
         analyseButton.interactable = false;
-
-        if (dropdownArrow != null)
-        {
-            dropdownArrow.localEulerAngles = Vector3.zero;
-        }
-
-        Log("Dropdown initialized with 1 placeholder and 6 issue models.");
     }
     #endregion
 
@@ -84,22 +98,26 @@ public class ModelDropdownController : MonoBehaviour
             return;
         }
 
-        if (index < 0 || index >= modelDropdown.options.Count)
+        if (index < 0 || index >= ModelOptions.Count)
         {
             SelectedModelName = string.Empty;
-            analyseButton.interactable = false;
-            Log("No valid model selected. Analyse disabled.");
+            SelectedModelDisplayName = string.Empty;
+            analyseButton.interactable = false; 
+            Log ("No valid model selected. Analyse disabled.");
             return;
         }
 
-        string selectedText = modelDropdown.options[index].text;
-        bool isPlaceholder = selectedText == PlaceholderOption;
+        ModelOption selectedOption = ModelOptions[index];
+        bool isPlaceholder = string.IsNullOrEmpty(selectedOption.apiValue);
 
-        SelectedModelName = isPlaceholder ? string.Empty : selectedText;
-        analyseButton.interactable = !isPlaceholder;
-        Log(isPlaceholder
-            ? "Placeholder selected. Analyse disabled."
-            : $"Model selected: {SelectedModelName}");
+        SelectedModelName = isPlaceholder ? string.Empty : selectedOption.apiValue;
+        SelectedModelDisplayName = isPlaceholder ? string.Empty : selectedOption.displayName;
+        analyseButton.interactable = !isPlaceholder; 
+
+        Log (isPlaceholder
+        ? "Placeholder selected. Analyse disabled."
+        : $"Model selected: {SelectedModelDisplayName} (api:{SelectedModelName})");  
+
     }
 
     private void Update()
@@ -128,6 +146,7 @@ public class ModelDropdownController : MonoBehaviour
 
         modelDropdown.SetValueWithoutNotify(0);
         SelectedModelName = string.Empty;
+        SelectedModelDisplayName = string.Empty;
         analyseButton.interactable = false;
 
         Log("Dropdown reset to placeholder.");

@@ -9,14 +9,14 @@ using TMPro;
 
 public class MainUIFlowController : MonoBehaviour
 {
-   //States that we have- 
-   //Idle - the app just started and is waiting for GPS data
-   //Loading_Location - GOS acquiring a location, all buttons are locked
-   // Loading_API- GPS done, API request sent and all buttons remain locked 
-   //Success_WithData - road found AND there is JSON data available -> LearnMore button becomes shown
-   //CaptureImage - this is the state where the user can take a picture of the road defect, accessed by tapping the Report Issue button in the info panel
-   //Success_NoData - road found BUT no JSON data available -> LearnMore button remains hidden, but AddInfo button shown
-   //Error - GPS or network failure - Retry button or go to main page(?)
+    //States that we have-
+    //Idle - the app just started and is waiting for GPS data
+    //Loading_Location - GOS acquiring a location, all buttons are locked
+    // Loading_API- GPS done, API request sent and all buttons remain locked
+    //Success_WithData - road found AND there is JSON data available -> LearnMore button becomes shown
+    //CaptureImage - this is the state where the user can take a picture of the road defect, accessed by tapping the Report Issue button in the info panel
+    //Success_NoData - road found BUT no JSON data available -> LearnMore button remains hidden, but AddInfo button shown
+    //Error - GPS or network failure - Retry button or go to main page(?)
     //To prevent multiple API calls the Check-In button is disabled immediately after tapping
     //Check-In button reenabled when back to main page which is returning to Idle/ 
 
@@ -114,7 +114,7 @@ public class MainUIFlowController : MonoBehaviour
     [Header("Test Mode")]
     [Tooltip("Off = real flow. FullMock = all fake. CVLive = mock Maps + real CV + grievance")]
     [SerializeField] private TestMode testMode = TestMode.Off;
-     private string testRoadName = "Meston Road"; //Default road name from the JSON used for simulating the success call
+    private string testRoadName = "Meston Road"; //Default road name from the JSON used for simulating the success call
 
     [Header("Grievance Submission UI Elements")]
     [Tooltip("All the graphic elements for the image capture")]
@@ -143,9 +143,9 @@ public class MainUIFlowController : MonoBehaviour
     [SerializeField] private GameObject submitGrievanceButton; // show in reviewresult, tapped to file the grievance
 
     [Header("Script References")]
-    public  DebugOverlayController debugOverlayController; 
-    public LocationServiceManager locationServiceManager; 
-    public GoogleMapsServices googleMapsServices; 
+    public DebugOverlayController debugOverlayController;
+    public LocationServiceManager locationServiceManager;
+    public GoogleMapsServices googleMapsServices;
     public LocationJSONLoader locationJSONLoader;
     public SharedCameraManager sharedCameraManager; //Reference to the shared camera manager script to trigger the camera which will capture the image
     //public LoadingCircleAnimation loadingCircleAnimation; //Reference to the loading circle script to trigger animation. 
@@ -165,7 +165,7 @@ public class MainUIFlowController : MonoBehaviour
 
     #region Unity Lifecycle Methods
 
-    void Start ()
+    void Start()
     {
         SetupInitialUI();
     }
@@ -176,10 +176,10 @@ public class MainUIFlowController : MonoBehaviour
     public bool isTestModeActive => testMode != TestMode.Off;
     public bool isMapsLocked => testMode != TestMode.Off;
     public bool isFullMock => testMode == TestMode.FullMock;
-    public bool isCVLive => testMode == TestMode.CVLive; 
+    public bool isCVLive => testMode == TestMode.CVLive;
     public void ToggleTestMode()
     {
-        testMode = (TestMode)(((int)testMode +1) % 3); //Cycle through - Off -> FullMock -> CVLive -> Off
+        testMode = (TestMode)(((int)testMode + 1) % 3); //Cycle through - Off -> FullMock -> CVLive -> Off
         debugOverlayController?.ShowTestMode(testMode.ToString());
         Debug.Log($"[PanelManager] Test Mode: {testMode}");
     }
@@ -188,7 +188,7 @@ public class MainUIFlowController : MonoBehaviour
     {
         HideAllPanels(); //Needed for hiding the logo panel 
         if (loadingSpinner != null) loadingSpinner.SetActive(false); //Ensures that the spinner is hidden at the beginning
-        logoScreen.SetActive(true); 
+        logoScreen.SetActive(true);
         if (PanelActionCardPrefab != null) PanelActionCardPrefab.SetActive(true); //Show the main action card panel which will be the base for showing the status messages and buttons in the Idle state
         SetState(UIState.Idle); //Set initial state to Idle
         debugOverlayController?.ShowTestMode(testMode.ToString()); //Update the debug overlay if it exists
@@ -200,7 +200,7 @@ public class MainUIFlowController : MonoBehaviour
     public void SetState(UIState newState, string roadName = null)
     {
         currentState = newState;
-        flowDebugOverlay?.ShowUIState(newState.ToString()); 
+        flowDebugOverlay?.ShowUIState(newState.ToString());
 
         //Keep roadname for the two success states, and clear it for the others 
         if ((newState == UIState.Success_WithData || newState == UIState.Success_NoData) && !string.IsNullOrEmpty(roadName))
@@ -210,7 +210,7 @@ public class MainUIFlowController : MonoBehaviour
 
         else if (newState != UIState.Success_WithData && newState != UIState.Success_NoData && newState != UIState.CaptureImage)
         {
-            currentRoadName = null; 
+            currentRoadName = null;
         }
 
         ResetVisualState();
@@ -226,9 +226,9 @@ public class MainUIFlowController : MonoBehaviour
 
             case UIState.Loading_Location:
                 LoadingMessageGroup.SetActive(true);
-                SetLoadingMessage("Getting your location","Please wait a moment...");
-                if(buttonSlot != null) buttonSlot.SetActive(false); //Hides the buttons to prevent height messup
-                if (loadingSpinner != null) loadingSpinner.SetActive(true); 
+                SetLoadingMessage("Getting your location", "Please wait a moment...");
+                if (buttonSlot != null) buttonSlot.SetActive(false); //Hides the buttons to prevent height messup
+                if (loadingSpinner != null) loadingSpinner.SetActive(true);
                 break;
 
             // case UIState.Loading_LocationSampling:
@@ -238,14 +238,14 @@ public class MainUIFlowController : MonoBehaviour
 
             case UIState.Loading_API:
                 LoadingMessageGroup.SetActive(true);
-                if (loadingSpinner != null) loadingSpinner.SetActive(true); 
-                if(buttonSlot != null) buttonSlot.SetActive(false); //Hides the buttons to prevent height messup
+                //if (loadingSpinner != null) loadingSpinner.SetActive(true);
+                if (buttonSlot != null) buttonSlot.SetActive(false); //Hides the buttons to prevent height messup
                 //SetLoadingMessage("Contacting server...", "Fetching road data.");
                 break;
 
             case UIState.Success_WithData:
                 StatusMessageGroup.SetActive(true);
-                if(buttonSlot != null) buttonSlot.SetActive(true); //Shows the buttons
+                if (buttonSlot != null) buttonSlot.SetActive(true); //Shows the buttons
                 RoadInsetGroup.SetActive(true);
                 learnMoreButton.SetActive(true);
                 SetStatusMessage($"Information available for {currentRoadName}. Tap on learn more button to see details.");
@@ -254,9 +254,9 @@ public class MainUIFlowController : MonoBehaviour
                 break;
 
             case UIState.CaptureImage:
-            reportIssuePanel.SetActive(true); //Show the main panel housing the report flow elements
-            SetReportFlowState(ReportFlowState.LiveCapture); //Set the sub-state for the report flow to live capture, which will show the relevant UI elements for that phase
-            break;
+                reportIssuePanel.SetActive(true); //Show the main panel housing the report flow elements
+                SetReportFlowState(ReportFlowState.LiveCapture); //Set the sub-state for the report flow to live capture, which will show the relevant UI elements for that phase
+                break;
 
             case UIState.Error:
                 StatusMessageGroup.SetActive(true);
@@ -276,122 +276,122 @@ public class MainUIFlowController : MonoBehaviour
         Debug.Log($"[PanelManager] State → {newState} | road: '{roadName ?? "null"}'");
     }
 
-        //Controls which UI elements are shown during the different phases of the Report Issue flow within Capture Image state
-        //Called internally and never by button OnClick events
-        //Each substate hides everything first and then shows what's needed. 
+    //Controls which UI elements are shown during the different phases of the Report Issue flow within Capture Image state
+    //Called internally and never by button OnClick events
+    //Each substate hides everything first and then shows what's needed.
     private void SetReportFlowState(ReportFlowState reportState)
     {
-        currentReportFlowState = reportState; 
+        currentReportFlowState = reportState;
         // Keep the parent panel alive across all report substates.
         if (reportIssuePanel != null) reportIssuePanel.SetActive(true);
         if (buttonSlot != null) buttonSlot.SetActive(true);
         HideReportSubPanels(); //Cleares the panels specific to report flow substates
         HideAllButtons(); //clears all buttons including capture sub-buttons
-    
+
         if (reportState != ReportFlowState.AwaitingAnalysis)
         {
             CancelInvoke("OnAnalysisComplete");
         }
-        
-        switch(reportState)
+
+        switch (reportState)
         {
             case ReportFlowState.LiveCapture:
-            sharedCameraManager?.ResumeFeed();
-            ShowButton(captureButton, interactable: true); //Show the capture button and allow interaction
-            captureSquare.SetActive(true); //Show the capture square to guide users on how to frame the image
-            SetImageCaptureInstructionText("Position defect within dotted square and tap on capture when ready."); //Set instructions for image capture
-            break;
-    
+                sharedCameraManager?.ResumeFeed();
+                ShowButton(captureButton, interactable: true); //Show the capture button and allow interaction
+                captureSquare.SetActive(true); //Show the capture square to guide users on how to frame the image
+                SetImageCaptureInstructionText("Position defect within dotted square and tap on capture when ready."); //Set instructions for image capture
+                break;
+
             case ReportFlowState.Preview:
-            if (capturedFramePanel != null) capturedFramePanel.SetActive(true);
-            if (modelDropdownPanel != null) modelDropdownPanel.SetActive(true);
-            if (previewRawImage != null) previewRawImage.gameObject.SetActive(true);
+                if (capturedFramePanel != null) capturedFramePanel.SetActive(true);
+                if (modelDropdownPanel != null) modelDropdownPanel.SetActive(true);
+                if (previewRawImage != null) previewRawImage.gameObject.SetActive(true);
 
-            // Analyse appears disabled until issue type is selected.
-            ShowButton(analyseButton, interactable: false);
-            ShowButton(retakeButton, interactable: true);
+                // Analyse appears disabled until issue type is selected.
+                ShowButton(analyseButton, interactable: false);
+                ShowButton(retakeButton, interactable: true);
 
-            SetImageCaptureInstructionText("Review the captured image. Tap Analyse to submit for analysis or Retake to try again.");
-            sharedCameraManager?.SuspendFeed();
-            break;
+                SetImageCaptureInstructionText("Review the captured image. Tap Analyse to submit for analysis or Retake to try again.");
+                sharedCameraManager?.SuspendFeed();
+                break;
 
             case ReportFlowState.AwaitingAnalysis:
-            sharedCameraManager?.SuspendFeed();
-            capturedFramePanel.SetActive(true); 
-            previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
-            //instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
-            SetImageCaptureInstructionText("Submitting image for analysis..."); //Set status message to let user know we are working on analysis
-            //if (loadingSpinner != null) loadingSpinner.SetActive(true); 
-            //if (loadingCircleAnimation != null) loadingCircleAnimation.StartAnimation(); //Trigger the loading circle animation when we start loading API call
-            
-            //FullMock uses timer-driven fake CV result to keep demo flow going
-            if (isFullMock)
+                sharedCameraManager?.SuspendFeed();
+                capturedFramePanel.SetActive(true);
+                previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
+                //instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
+                SetImageCaptureInstructionText("Submitting image for analysis..."); //Set status message to let user know we are working on analysis
+                //if (loadingSpinner != null) loadingSpinner.SetActive(true);
+                //if (loadingCircleAnimation != null) loadingCircleAnimation.StartAnimation(); //Trigger the loading circle animation when we start loading API call
+
+                //FullMock uses timer-driven fake CV result to keep demo flow going
+                if (isFullMock)
                 {
                     Invoke("OnAnalysisComplete", 3f); //After 3 seconds, simulates fake CV results
                 }
-            break;
-    
+                break;
+
             case ReportFlowState.ReviewResult:
-            sharedCameraManager?.SuspendFeed();
-            capturedFramePanel.SetActive(true); 
-            previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
-            //instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
-            //This is where we will show the results from the CV analysis 
-            bool canSubmit = currentCVResult != null && currentCVResult.detected;
-            if (canSubmit)
-            {
-                SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint"); //Placeholder, will replace with real results from the CV analysis later
-            }
-            else
-            {
-                SetImageCaptureInstructionText("Issue type not detected. Retake photo again and choose matching issue type.");
-            }
-            //if (loadingSpinner != null) loadingSpinner.SetActive(false); 
-            if (reviewResultsPanel != null && !reviewResultsPanel.activeSelf) reviewResultsPanel.SetActive(true); //Keep active if already visible to avoid unnecessary relayout churn.
-            ShowButton(retakeButton, interactable: true);
-            ShowButton(submitGrievanceButton, interactable: canSubmit); //Submit button is visible but disabled when issue is not detected.
-            break;
-    
+                sharedCameraManager?.SuspendFeed();
+                capturedFramePanel.SetActive(true);
+                previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
+                //instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
+                //This is where we will show the results from the CV analysis
+                bool canSubmit = currentCVResult != null && currentCVResult.detected;
+                if (canSubmit)
+                {
+                    SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint"); //Placeholder, will replace with real results from the CV analysis later
+                }
+                else
+                {
+                    SetImageCaptureInstructionText("Issue type not detected. Retake photo again and choose matching issue type.");
+                }
+                //if (loadingSpinner != null) loadingSpinner.SetActive(false);
+                if (reviewResultsPanel != null && !reviewResultsPanel.activeSelf) reviewResultsPanel.SetActive(true); //Keep active if already visible to avoid unnecessary relayout churn.
+                ShowButton(retakeButton, interactable: true);
+                ShowButton(submitGrievanceButton, interactable: canSubmit); //Submit button is visible but disabled when issue is not detected.
+                break;
+
             case ReportFlowState.SubmittingGrievance:
-            sharedCameraManager?.SuspendFeed();
-            capturedFramePanel.SetActive(true); 
-            previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
-            if (reviewResultsPanel != null) reviewResultsPanel.SetActive(true); //Keep the result visible while submitting
-            //instructionpanel.SetActive(true);
-            SetImageCaptureInstructionText("Filing grievance report...");
-            ShowButton(submitGrievanceButton, interactable: false); //Submit button appears once the CV result comes in
-            break;
-    
+                sharedCameraManager?.SuspendFeed();
+                capturedFramePanel.SetActive(true);
+                previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
+                if (reviewResultsPanel != null) reviewResultsPanel.SetActive(true); //Keep the result visible while submitting
+                //instructionpanel.SetActive(true);
+                SetImageCaptureInstructionText("Filing grievance report...");
+                ShowButton(submitGrievanceButton, interactable: false); //Submit button appears once the CV result comes in
+                break;
+
             case ReportFlowState.Success:
-            sharedCameraManager?.ResumeFeed();  
-            //Placeholder - wire up when submission backend is ready, this is where we will show the complaint lodged successfully
-            //instructionpanel.SetActive(true);
-            SetImageCaptureInstructionText("Complaint submitted");
-            if (loadingSpinner != null) loadingSpinner.SetActive(false);
-            //if (successSubmissionPanel != null) successSubmissionPanel.SetActive(true);
-            //ShowButton(backButton, interactable: true); //Show the back button to let user return to main page after seeing success message
-            break;
+                sharedCameraManager?.ResumeFeed();
+                //Placeholder - wire up when submission backend is ready, this is where we will show the complaint lodged successfully
+                //instructionpanel.SetActive(true);
+                SetImageCaptureInstructionText("Complaint submitted");
+                if (loadingSpinner != null) loadingSpinner.SetActive(false);
+                //if (successSubmissionPanel != null) successSubmissionPanel.SetActive(true);
+                //ShowButton(backButton, interactable: true); //Show the back button to let user return to main page after seeing success message
+                break;
         }
-    
+
         debugOverlayController?.ShowReportFlowState($"Report Issue Flow → {reportState}"); //Log the current sub-state of the report issue flow in the debug overlay for testing purposes
         flowDebugOverlay?.ShowReportFlowState(reportState.ToString());
-    
+
     }
-    
-     #endregion
 
-     #region Button Event Methods
-     //CheckIn button OnClick method 
+    #endregion
 
-     public void onCheckInButtonPressed()
+    #region Button Event Methods
+    //CheckIn button OnClick method
+
+    public void onCheckInButtonPressed()
     {
         string modeLabel = isFullMock ? "FullMock": (isCVLive ? "CVLive" : "Real");
         Debug.Log($"[PanelManager] checkIn start mode={modeLabel}");
 
         if (isMapsLocked)
         {
-            SetState (UIState.Loading_Location);
-            Invoke ("SimulateAPIResponse", 2f); //Simulate API response after 2 seconds, this will trigger the success state with data and show the Learn More button
+            SetState(UIState.Loading_Location);
+            Invoke("SimulateAPIResponse", 2f); //Simulate API response after 2 seconds, this will trigger the success state with data and show the Learn More button
             return;
         }
 
@@ -457,11 +457,11 @@ public class MainUIFlowController : MonoBehaviour
         HideAllPanels(); //Hide all panels before showing Learn More content and project list
         HideAllButtons(); //Hide buttons first, then show only Report Issue for road-level action
         //HideReportSubPanels();
-       logoScreen.SetActive(false); //Hide logo screen 
-       PanelActionCardPrefab.SetActive(false); //Hide the main action card panel to reveal the project cards underneath
-        if (buttonSlot != null) buttonSlot.SetActive(false); 
-       //ResetVisualState(); //Reset visual state to clear out any leftover elements from previous states, this is important for cases where we have multiple consecutive successes with different data, to ensure the new data is shown cleanly without remnants from the previous state
-       SetStatusMessage(string.Empty); //Clear state status text so the Learn More header remains the focus
+        logoScreen.SetActive(false); //Hide logo screen
+        PanelActionCardPrefab.SetActive(false); //Hide the main action card panel to reveal the project cards underneath
+        if (buttonSlot != null) buttonSlot.SetActive(false);
+        //ResetVisualState(); //Reset visual state to clear out any leftover elements from previous states, this is important for cases where we have multiple consecutive successes with different data, to ensure the new data is shown cleanly without remnants from the previous state
+        SetStatusMessage(string.Empty); //Clear state status text so the Learn More header remains the focus
 
         ClearExistingProjectCards();
         InstantiateProjectCards(projects);
@@ -479,12 +479,12 @@ public class MainUIFlowController : MonoBehaviour
     {
         HideAllPanels(); //Hide all panels before showing the panels for ImageCapture
         HideAllButtons(); //Hide all buttons
-        SetState(UIState.CaptureImage); 
+        SetState(UIState.CaptureImage);
     }
 
     public void OnCaptureButtonPressed()
     {
-        if(sharedCameraManager == null || !sharedCameraManager.IsReady()) return; //Safety check to ensure camera manager is ready before trying to capture, prevents errors
+        if (sharedCameraManager == null || !sharedCameraManager.IsReady()) return; //Safety check to ensure camera manager is ready before trying to capture, prevents errors
 
         Texture2D img = sharedCameraManager.CapturePreviewFrame();
 
@@ -495,8 +495,8 @@ public class MainUIFlowController : MonoBehaviour
             return;
         }
 
-        //Assign the frozen snapshot to the preview RawImage so the user can review before submitting 
-        if(previewRawImage != null)
+        //Assign the frozen snapshot to the preview RawImage so the user can review before submitting
+        if (previewRawImage != null)
         {
             previewRawImage.texture = img;
             SetReportFlowState(ReportFlowState.Preview); //Move to the preview sub-state where user can choose to submit for analysis or retake
@@ -527,13 +527,9 @@ public class MainUIFlowController : MonoBehaviour
 
     public void OnAnalyseButtonPressed()
     {
+        string modelDisplayName = modelDropdownController != null ? modelDropdownController.SelectedModelDisplayName : string.Empty;
         string modelName = modelDropdownController != null ? modelDropdownController.SelectedModelName : string.Empty;
-        if (string.IsNullOrEmpty(modelName))
-        {
-            debugOverlayController?.ShowCVAPIResult("[PanelManager] Analyse blocked: no Issue Type selected");
-            flowDebugOverlay?.MarkAnalyseFailed();
-            return;
-        }
+
 
         if (submissionManager == null)
         {
@@ -545,12 +541,12 @@ public class MainUIFlowController : MonoBehaviour
 
         Texture2D image = sharedCameraManager?.GetPreviewImage();
         //When maps are locked (FullMock or CVLive), use the hardcoded stand-ins;
-        LocationServiceManager.LocationSnapshot snapshot; 
+        LocationServiceManager.LocationSnapshot snapshot;
         string roadName;
         if (isMapsLocked)
         {
             snapshot = new LocationServiceManager.LocationSnapshot(26.515430f,80.235020f,5f); //Nursery GPS value
-            roadName = string.IsNullOrEmpty(currentRoadName)? testRoadName: currentRoadName; 
+            roadName = string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName;
         }
         else
         {
@@ -559,7 +555,7 @@ public class MainUIFlowController : MonoBehaviour
         }
 
         SetReportFlowState(ReportFlowState.AwaitingAnalysis);
-        flowDebugOverlay?.MarkAnalyseStarted(); 
+        flowDebugOverlay?.MarkAnalyseStarted();
 
         //FullMock does not call CV APi. AwaitingAnalysis is already scheduled OnAnalysisComplete.
         if (isFullMock)
@@ -570,55 +566,59 @@ public class MainUIFlowController : MonoBehaviour
         }
 
         submissionManager.SubmitReport(
-        image, snapshot, roadName, modelName,
-        onSuccess: (CVAnalysisResult result, string responseCode) =>
-        {
-            flowDebugOverlay?.MarkAnalyseSuccess(responseCode);
-
-            if (result == null)
+            image, snapshot, roadName, modelName,
+            onSuccess: (CVAnalysisResult result, string responseCode) =>
             {
-                if (isCVLive)
+                flowDebugOverlay?.MarkAnalyseSuccess(responseCode);
+
+                if (result == null)
                 {
-                debugOverlayController?.ShowCVAPIResult("[MainUIFlowController] CVLive 200-OK smoke test returned null payload. Using mock result for UI flow");
-                result = BuildMockCVResult();
+                    if (isCVLive)
+                    {
+                        debugOverlayController?.ShowCVAPIResult("[MainUIFlowController] CVLive 200-OK smoke test returned null payload. Using mock result for UI flow");
+                        result = BuildMockCVResult();
+                    }
+                    else
+                    {
+                        debugOverlayController?.ShowCVAPIResult("[MainUIFlowController] CV callback fired but payload was null. Returning to Preview.");
+                        flowDebugOverlay?.MarkAnalyseFailed();
+                        SetReportFlowState(ReportFlowState.Preview);
+                        return;
+                    }
                 }
-            else
+
+                currentCVResult = result;
+                if (!string.IsNullOrEmpty(modelDisplayName))
                 {
-                debugOverlayController?.ShowCVAPIResult("[MainUIFlowController] CV callback fired but payload was null. Returning to Preview.");
-                flowDebugOverlay?.MarkAnalyseFailed();
+                    result.defect_type = modelDisplayName;
+                }
+                else if (!string.IsNullOrEmpty(modelName))
+                {
+                    result.defect_type = modelName;
+                }
+
+                SetReportFlowState(ReportFlowState.ReviewResult);
+                cvResultPopulator.Populate(result, roadName);
+            },
+
+            onFailure: (string error) =>
+            {
+                debugOverlayController?.ShowCVAPIResult("CV Analysis Failed: " + error);
+                flowDebugOverlay?.MarkAnalyseFailed(error);
                 SetReportFlowState(ReportFlowState.Preview);
-                return;
-                }
             }
-
-            currentCVResult = result;
-                if (!string.IsNullOrEmpty(modelName))
-            {
-            result.defect_type = modelName;
-            }
-
-        SetReportFlowState(ReportFlowState.ReviewResult);
-        cvResultPopulator.Populate(result, roadName);
-    },
-
-    onFailure: (string error) =>
-    {
-        debugOverlayController?.ShowCVAPIResult("CV Analysis Failed: " + error);
-        flowDebugOverlay?.MarkAnalyseFailed(error);
-        SetReportFlowState(ReportFlowState.Preview);
-    }
-);
+        );
 
     }
 
     public void OnSubmitGrievanceButtonPressed()
     {
-        if (grievanceSubmissionManager == null)//Main null check 
-            {
-                debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] GrievanceSubmissionManager is not assigned in the Inspector");
-                flowDebugOverlay?.MarkSubmitFailed();
-                return;
-            }
+        if (grievanceSubmissionManager == null)//Main null check
+        {
+            debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] GrievanceSubmissionManager is not assigned in the Inspector");
+            flowDebugOverlay?.MarkSubmitFailed();
+            return;
+        }
 
         Texture2D image = sharedCameraManager?.GetPreviewImage();
         if (image == null)
@@ -637,7 +637,7 @@ public class MainUIFlowController : MonoBehaviour
         }
 
         LocationServiceManager.LocationSnapshot snapshot;
-        string roadName; 
+        string roadName;
 
         if (isMapsLocked)
         {
@@ -652,8 +652,8 @@ public class MainUIFlowController : MonoBehaviour
         SetReportFlowState(ReportFlowState.SubmittingGrievance);
         flowDebugOverlay?.MarkSubmitStarted();
 
-         grievanceSubmissionManager.SubmitGrievance(
-                image,
+        grievanceSubmissionManager.SubmitGrievance(
+            image,
             currentCVResult,
             snapshot,
             roadName,
@@ -703,16 +703,16 @@ public class MainUIFlowController : MonoBehaviour
 
         CVAnalysisResult fakeResult = BuildMockCVResult();
         currentCVResult = fakeResult; //Store the fake result so it cane be it can be submitted if user taps submit without retaking
-       
-       string selectedIssueType = modelDropdownController != null ? modelDropdownController.SelectedModelName : string.Empty;
-       if (!string.IsNullOrEmpty(selectedIssueType))
-       {
-           fakeResult.defect_type = selectedIssueType;
-       }
+
+        string selectedIssueTypeDisplay = modelDropdownController != null ? modelDropdownController.SelectedModelDisplayName : string.Empty;
+        if (!string.IsNullOrEmpty(selectedIssueTypeDisplay))
+        {
+            fakeResult.defect_type = selectedIssueTypeDisplay;
+        }
 
         // Activate ReviewResult first so first-time layout measures on an active hierarchy.
         SetReportFlowState(ReportFlowState.ReviewResult);
-       cvResultPopulator.Populate(fakeResult, string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName);
+        cvResultPopulator.Populate(fakeResult, string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName);
     }
 
     private CVAnalysisResult BuildMockCVResult()
@@ -754,17 +754,17 @@ public class MainUIFlowController : MonoBehaviour
     #endregion
 
     #region GPS + API Trigger
-        //Method for simulating the API response when maps are locked by TestMode.
-        private void SimulateAPIResponse()
-        {
-            SetState(UIState.Loading_API); 
-            Invoke("SimulateSuccess", 2f); //Simulate a success message after 2s 
-        }
+    //Method for simulating the API response when maps are locked by TestMode.
+    private void SimulateAPIResponse()
+    {
+        SetState(UIState.Loading_API);
+        Invoke("SimulateSuccess", 2f); //Simulate a success message after 2s
+    }
 
-        private void SimulateSuccess()
-        {
+    private void SimulateSuccess()
+    {
         OnRoadNameReceived(testRoadName);
-        }
+    }
 
     #endregion 
 
@@ -813,16 +813,16 @@ public class MainUIFlowController : MonoBehaviour
     {
         if (statusMessageText != null)
         {
-          statusMessageText.text = message;  
-        }   
+            statusMessageText.text = message;
+        }
     }
 
     private void SetImageCaptureInstructionText(string message)
     {
         if (imageCaptureInstructionText != null)
         {
-          imageCaptureInstructionText.text = message;  
-        }   
+            imageCaptureInstructionText.text = message;
+        }
     }
 
     private void UpdateRoadHeaderTexts(string roadName, int projectCount)
@@ -855,30 +855,29 @@ public class MainUIFlowController : MonoBehaviour
     private void InstantiateProjectCards(ProjectRecord[] projects)
     {
         if (projectCardContentContainer == null || projectCardPrefab == null || projects == null)
-    {
-        return;
-    }
-
-    for (int i = 0; i < projects.Length; i++)
-     {
-        ProjectRecord project = projects[i];
-        GameObject cardObject = Instantiate(projectCardPrefab, projectCardContentContainer);
-        cardObject.SetActive(true);
-        ProjectCardController cardController = cardObject.GetComponent<ProjectCardController>();
-
-        if (cardController != null)
         {
-            cardController.Populate(project, i);
+            return;
         }
-        else
+
+        for (int i = 0; i < projects.Length; i++)
         {
-            Debug.LogWarning("[PanelManager] Project card prefab is missing ProjectCardController.");
+            ProjectRecord project = projects[i];
+            GameObject cardObject = Instantiate(projectCardPrefab, projectCardContentContainer);
+            cardObject.SetActive(true);
+            ProjectCardController cardController = cardObject.GetComponent<ProjectCardController>();
+
+            if (cardController != null)
+            {
+                cardController.Populate(project, i);
+            }
+            else
+            {
+                Debug.LogWarning("[PanelManager] Project card prefab is missing ProjectCardController.");
+            }
         }
-        
-    }
     }
 
-        //ResetVisualState - Calls all reset helpers to ensure clean slate before setting new state
+    //ResetVisualState - Calls all reset helpers to ensure clean slate before setting new state
 
     private void ResetVisualState()
     {
@@ -923,41 +922,41 @@ public class MainUIFlowController : MonoBehaviour
     private void HideAllButtons()
     {
         if (checkInButton != null) checkInButton.SetActive(false);
-        if (learnMoreButton != null) learnMoreButton.SetActive(false); 
+        if (learnMoreButton != null) learnMoreButton.SetActive(false);
         if (reportIssueButton != null) reportIssueButton.SetActive(false);
         if (captureButton != null) captureButton.SetActive(false);
-        if (analyseButton != null) analyseButton.SetActive(false); 
+        if (analyseButton != null) analyseButton.SetActive(false);
         if (retakeButton != null) retakeButton.SetActive(false);
-        if(submitGrievanceButton != null) submitGrievanceButton.SetActive(false);
+        if (submitGrievanceButton != null) submitGrievanceButton.SetActive(false);
     }
 
     //Show a button and set its interactability
     private void ShowButton(GameObject buttonObject, bool interactable)
     {
         if (buttonObject == null) return;
-        buttonObject.SetActive(true); 
+        buttonObject.SetActive(true);
         var btn = buttonObject.GetComponent<Button>();
-        if(btn != null) btn.interactable = interactable;
+        if (btn != null) btn.interactable = interactable;
     }
 
     public void HideAllPanels()
     {
-        if (logoScreen != null) logoScreen.SetActive(false); 
-       //if (panelActionCardPrefab != null) panelActionCardPrefab.SetActive(false);
+        if (logoScreen != null) logoScreen.SetActive(false);
+        //if (panelActionCardPrefab != null) panelActionCardPrefab.SetActive(false);
         if (roadHeaderPanel != null) roadHeaderPanel.SetActive(false);
         if (projectCardScrollPanel != null) projectCardScrollPanel.SetActive(false);
     }
 
     private void HideReportSubPanels()
-{
-    //if (imageCaptureInstructionPanel != null) imageCaptureInstructionPanel.SetActive(false);
-    //if (instructionpanel != null) instructionpanel.SetActive(false);
-    if (captureSquare != null) captureSquare.SetActive(false);
-    if(capturedFramePanel != null) capturedFramePanel.SetActive(false); 
-    if (modelDropdownPanel != null) modelDropdownPanel.SetActive(false);
-    // if (awaitingPanel != null) awaitingPanel.SetActive(false);
-    if(reviewResultsPanel != null) reviewResultsPanel.SetActive(false);
-    // if(successSubmissionPanel != null) successSubmissionPanel.SetActive(false); // HACK: force-hide success panel when leaving report flow
-}
+    {
+        //if (imageCaptureInstructionPanel != null) imageCaptureInstructionPanel.SetActive(false);
+        //if (instructionpanel != null) instructionpanel.SetActive(false);
+        if (captureSquare != null) captureSquare.SetActive(false);
+        if (capturedFramePanel != null) capturedFramePanel.SetActive(false);
+        if (modelDropdownPanel != null) modelDropdownPanel.SetActive(false);
+        // if (awaitingPanel != null) awaitingPanel.SetActive(false);
+        if (reviewResultsPanel != null) reviewResultsPanel.SetActive(false);
+        // if(successSubmissionPanel != null) successSubmissionPanel.SetActive(false); // HACK: force-hide success panel when leaving report flow
+    }
     #endregion
 }

@@ -89,7 +89,7 @@ MonoBehaviour:
     color: {r: 0.101960786, g: 0.101960786, b: 0.101960786, a: 1}
   labelMediumSm:
     font: {fileID: 11400000, guid: 18db3b220d917460f9fb6a8dfb7dafcc, type: 2}
-    size: 12
+    size: 10
     lineHeight: 16
     color: {r: 0.23529412, g: 0.23529412, b: 0.23529412, a: 1}
   labelRegularSm:
