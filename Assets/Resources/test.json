@@ -71,6 +71,10 @@
     {
       "roadName": "Gandhi Gram Road",
       "projectIds": ["proj_014"]
+    },
+    {
+      "roadName": "Sixth Avenue",
+      "projectIds": ["proj_015"]
     }
   ],
   "projects": [
@@ -213,6 +217,17 @@
       "length": "N/A",
       "contractor": "M/s Maa Sarda interprises",
       "stretchDescription": "Zone-2 ward-26 gandhi gram to Babita paswan"
+    },
+
+{
+      "projectId": "proj_015",
+      "workType": "Road Improvent Work by Hot Mix Plant and Waste Plastic",
+      "budget": "6.79 CR",
+      "startDate": "21/11/2020",
+      "endDate": "11/03/2024",
+      "length": "545m",
+      "contractor": "M/s Test Long Contractor Name",
+      "stretchDescription": "Long test description for testing purpose only, from test crossing to test crossing"
     }
   ]
 }

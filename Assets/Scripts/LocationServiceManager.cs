@@ -38,10 +38,10 @@ public class LocationServiceManager : MonoBehaviour
   [SerializeField] private int minAcceptedSamples =2;
 
   [Tooltip("If false, uses single-read legacy-compatible behavior for the callback overload.")]
-  [SerializeField] private bool enableSampleAveraging = true;
+  [SerializeField] private bool enableSampleAveraging = false;
 
     [Tooltip("If true, repeated timestamps can count as stationary observations when quality checks pass.")]
-    [SerializeField] private bool allowStationaryRepeatedTimestamps = true;
+    [SerializeField] private bool allowStationaryRepeatedTimestamps = false;
 
     [Tooltip("Repeated stationary observations are allowed only after this many seconds in one sampling attempt.")]
     [SerializeField] private float stationaryRepeatUnlockSeconds = 2f;
@@ -168,11 +168,17 @@ public struct LocationSnapshot
         {
             StartCoroutine(InitializeLocationService());
         }
+
+        else if (_currentState == LocationServiceState.Running)
+        {
+            debugOverlayController?.ShowGPSSnapshotRefreshRequested();
+            CaptureLocationSnapshot();
+        }
     }
 
     public void RequestLocation(System.Action<SampleResult, LocationSnapshot> onComplete)
     {
-        StartCoroutine(RequestLocationWithSampling(onComplete));
+        StartCoroutine(RequestLocationSingleSnapshot(onComplete));
     }
     #endregion
 
@@ -283,6 +289,13 @@ public struct LocationSnapshot
         {
             //Get current GPS data from Unity
             LocationInfo locationInfo = Input.location.lastData;
+            debugOverlayController?.ShowGPSSnapshotCaptured(
+                System.DateTime.Now,
+                locationInfo.timestamp,
+                locationInfo.latitude,
+                locationInfo.longitude,
+                locationInfo.horizontalAccuracy
+            );
 
             //Create a new snapshot with current data
             _lastValidSnapshot = new LocationSnapshot (
@@ -291,9 +304,51 @@ public struct LocationSnapshot
                 locationInfo.horizontalAccuracy
             );
 
+            debugOverlayController?.ShowGPSSnapshotStored(_lastValidSnapshot.timestamp);
+
             //Mark that we now have valid location data
             _hasValidLocation = true; 
         }
+    }
+
+    private IEnumerator RequestLocationSingleSnapshot(System.Action<SampleResult, LocationSnapshot> onComplete)
+    {
+        //Ensure service is running before reading one snapshot.
+        if (_currentState == LocationServiceState.Disabled || _currentState == LocationServiceState.Failed)
+        {
+            yield return StartCoroutine(InitializeLocationService());
+        }
+
+        //If another request is initializing, wait for it to settle.
+        float settleWaitElapsed = 0f;
+        while (_currentState == LocationServiceState.Initializing && settleWaitElapsed < initalizationTimeoutSeconds)
+        {
+            yield return new WaitForSeconds(0.5f);
+            settleWaitElapsed += 0.5f;
+        }
+
+        if (_currentState == LocationServiceState.Running && Input.location.status == LocationServiceStatus.Running)
+        {
+            CaptureLocationSnapshot();
+
+            //Keep gate/debug overlay compatibility fields meaningful in single-snapshot mode.
+            _lastSampleResult = SampleResult.Ok;
+            _lastSampleSpreadMeters = 0f;
+            _lastSampleAvgAccuracyMeters = _lastValidSnapshot.horizontalAccuracy;
+            _lastAcceptedSampleCount = 1;
+            _lastTotalSampleCount = 1;
+
+            onComplete?.Invoke(SampleResult.Ok, _lastValidSnapshot);
+            yield break;
+        }
+
+        _lastSampleResult = SampleResult.Timeout;
+        _lastSampleSpreadMeters = 0f;
+        _lastSampleAvgAccuracyMeters = 0f;
+        _lastAcceptedSampleCount = 0;
+        _lastTotalSampleCount = 0;
+
+        onComplete?.Invoke(SampleResult.Timeout, default(LocationSnapshot));
     }
 
     private IEnumerator RequestLocationWithSampling(System.Action<SampleResult, LocationSnapshot> onComplete)

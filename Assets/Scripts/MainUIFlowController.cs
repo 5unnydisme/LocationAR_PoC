@@ -29,8 +29,16 @@ public class MainUIFlowController : MonoBehaviour
         Success_WithData,
         CaptureImage,
         Success_NoData,
+        LocationResolutionFailed,
         Error_GPSAccuracy,
         Error 
+    }
+
+    public enum LocationFailureType
+    {
+        GoodAccuracyUnknownRoad,
+        ModerateAccuracyUnknownRoad,
+        PoorAccuracy
     }
 
     private enum ReportFlowState
@@ -124,7 +132,7 @@ public class MainUIFlowController : MonoBehaviour
     [SerializeField] private TextMeshProUGUI imageCaptureInstructionText;
     [SerializeField] private GameObject captureSquare; //this is the boundary within which the defect to be reported must be placed 
 
-    [SerializeField] private GameObject backButton; //button to go back to the info panel, it controls the UI state by resetting to previous state or Success_wData
+    [SerializeField] private GameObject mainMenuButton; //button to go back to the info panel, it controls the UI state by resetting to previous state or Success_wData
 
     [Header("ImageCapture UI Elements - Snapshot Review")]
     [SerializeField] private GameObject capturedFramePanel; //Shown AFTER capture, contains the RawImage below
@@ -161,6 +169,8 @@ public class MainUIFlowController : MonoBehaviour
     private ReportFlowState currentReportFlowState = ReportFlowState.LiveCapture;
     private string currentRoadName = null; //Set when Success condition hit, otherwise remains clear
     private CVAnalysisResult currentCVResult = null; //Stores the CV result between ReviewResult and the submission
+    private int locationRetryCount = 0; //Increments only when retry is pressed from LocationResolutionFailed
+    private LocationFailureType currentLocationFailureType = LocationFailureType.GoodAccuracyUnknownRoad;
     #endregion
 
     #region Unity Lifecycle Methods
@@ -219,6 +229,10 @@ public class MainUIFlowController : MonoBehaviour
         switch (currentState)
         {
             case UIState.Idle:
+                if (logoScreen != null) logoScreen.SetActive(true);
+                if (PanelActionCardPrefab != null) PanelActionCardPrefab.SetActive(true);
+                if (buttonSlot != null) buttonSlot.SetActive(true);
+                
                 StatusMessageGroup.SetActive(true);
                 checkInButton.SetActive(true);
                 SetStatusMessage("Tap on check-in button to see information about infrastructure near you.");
@@ -256,6 +270,10 @@ public class MainUIFlowController : MonoBehaviour
             case UIState.CaptureImage:
                 reportIssuePanel.SetActive(true); //Show the main panel housing the report flow elements
                 SetReportFlowState(ReportFlowState.LiveCapture); //Set the sub-state for the report flow to live capture, which will show the relevant UI elements for that phase
+                break;
+
+            case UIState.LocationResolutionFailed:
+                ConfigureLocationResolutionFailedUI(); //Single failure state with UI configured from accuracy class and retry count
                 break;
 
             case UIState.Error:
@@ -367,9 +385,8 @@ public class MainUIFlowController : MonoBehaviour
                 //Placeholder - wire up when submission backend is ready, this is where we will show the complaint lodged successfully
                 //instructionpanel.SetActive(true);
                 SetImageCaptureInstructionText("Complaint submitted");
-                if (loadingSpinner != null) loadingSpinner.SetActive(false);
                 //if (successSubmissionPanel != null) successSubmissionPanel.SetActive(true);
-                //ShowButton(backButton, interactable: true); //Show the back button to let user return to main page after seeing success message
+                ShowButton(mainMenuButton, interactable: true); //Show the back button to let user return to main page after seeing success message
                 break;
         }
 
@@ -395,6 +412,8 @@ public class MainUIFlowController : MonoBehaviour
             return;
         }
 
+        //Real Flow: Actual API calls with GPS
+
         if (locationServiceManager == null || googleMapsServices == null)
         {
             SetState(UIState.Error);
@@ -402,36 +421,41 @@ public class MainUIFlowController : MonoBehaviour
         }
 
         ShowButton(checkInButton, interactable: false);
-        // StartLocationSamplingAndResolveRoad();
+        SetState(UIState.Loading_Location); //Update UI state to loading location
+        locationServiceManager.RequestLocation(); //Start getting location from LocationServiceManager script
+
+        //Poll GPS and check every 2 seconds to see if we have a valid location, once we have that we trigger the API call 
+        Invoke("CheckGPSAndTriggerAPI", 2f); //Start checking after 2 seconds, gives GPS a moment to start up
+        //StartLocationSamplingAndResolveRoad();
     }
 
-    // private void StartLocationSamplingAndResolveRoad()
-    // {
-    //     SetState(UIState.Loading_LocationSampling);
+        // private void StartLocationSamplingAndResolveRoad()
+        // {
+        //     SetState(UIState.Loading_LocationSampling);
 
-    //     locationServiceManager.RequestLocation((result, snapshot) =>
-    //     {
-    //         float spread = locationServiceManager != null ? locationServiceManager.LastSampleSpreadMeters : 0f;
-    //         string avgAccText = result == LocationServiceManager.SampleResult.Ok
-    //             ? snapshot.horizontalAccuracy.ToString("F1")
-    //             : "n/a";
+        //     locationServiceManager.RequestLocation((result, snapshot) =>
+        //     {
+        //         float spread = locationServiceManager != null ? locationServiceManager.LastSampleSpreadMeters : 0f;
+        //         string avgAccText = result == LocationServiceManager.SampleResult.Ok
+        //             ? snapshot.horizontalAccuracy.ToString("F1")
+        //             : "n/a";
 
-    //         string gateLine = $"result={result} avgAcc={avgAccText} spread={spread:F1}";
-    //         debugOverlayController?.ShowGPSGate(gateLine); 
+        //         string gateLine = $"result={result} avgAcc={avgAccText} spread={spread:F1}";
+        //         debugOverlayController?.ShowGPSGate(gateLine); 
 
-    //         if (result == LocationServiceManager.SampleResult.Ok)
-    //         {
-    //             Debug.Log($"[PanelManager] gpsGate {gateLine} → nextState=Loading_API");
-    //             SetState(UIState.Loading_API);
-    //             googleMapsServices.GetActiveLocationName(snapshot.latitude, snapshot.longitude, OnRoadNameReceived);
-    //             return;
-    //         }
+        //         if (result == LocationServiceManager.SampleResult.Ok)
+        //         {
+        //             Debug.Log($"[PanelManager] gpsGate {gateLine} → nextState=Loading_API");
+        //             SetState(UIState.Loading_API);
+        //             googleMapsServices.GetActiveLocationName(snapshot.latitude, snapshot.longitude, OnRoadNameReceived);
+        //             return;
+        //         }
 
-    //         Debug.Log($"[PanelManager] gpsGate {gateLine} → nextState=Error_GPSAccuracy");
-    //         SetState(UIState.Error_GPSAccuracy);
-    //     });
-    
-    // }
+        //         Debug.Log($"[PanelManager] gpsGate {gateLine} → nextState=Error_GPSAccuracy");
+        //         SetState(UIState.Error_GPSAccuracy);
+        //     });
+        
+        // }
 
     //LearnMore button OnClick
     //Uses stored roadName to build the dynamic road-level project list view.
@@ -661,6 +685,7 @@ public class MainUIFlowController : MonoBehaviour
             {
                 flowDebugOverlay?.MarkSubmitSuccess(responseCode);
                 currentCVResult = null; // clear after successful submission
+                ResetLocationRetryCount(); //Reset after successful grievance submission
                 SetReportFlowState(ReportFlowState.Success);
             },
 
@@ -674,23 +699,33 @@ public class MainUIFlowController : MonoBehaviour
         );
     }
 
-    // public void OnBackButtonPressed()
-    // {
-    //     CancelInvoke("OnAnalysisComplete");
+        public void OnMainMenuButtonPressed()
+        {
+            // Reusing this handler for Retry in LocationResolutionFailed keeps Inspector wiring simple.
+            if (currentState == UIState.LocationResolutionFailed)
+            {
+                locationRetryCount++; //Required: increment only when retry is pressed
+                Debug.Log($"[PanelManager] Retry pressed from LocationResolutionFailed. count={locationRetryCount}");
+                SetState(UIState.Idle); //Required: return to Idle so user can Check-In again
+                return;
+            }
 
-    //     if(sharedCameraManager != null)
-    //     {
-    //         sharedCameraManager.ClearPreviewImage(); //Clear the preview image in the camera manager to free up memory, since we are going back and discarding the current capture
-    //     }
+            CancelInvoke("OnAnalysisComplete");
 
-    //     if (previewRawImage != null)
-    //     {
-    //         previewRawImage.texture = null; //Clear the preview image shown to the user to free up memory and reset the UI for next capture
-    //     }
-    //     currentCVResult = null; //discard any stored CV result since we are going back and not submitting, this prevents stale data from being submitted if user goes back but then later decides to submit without retaking the picture
-    //     cvResultPopulator?.Clear();
-    //     SetState(UIState.Idle);
-    // }
+            if(sharedCameraManager != null)
+            {
+                sharedCameraManager.ClearPreviewImage(); //Clear the preview image in the camera manager to free up memory, since we are going back and discarding the current capture
+            }
+
+            if (previewRawImage != null)
+            {
+                previewRawImage.texture = null; //Clear the preview image shown to the user to free up memory and reset the UI for next capture
+            }
+            currentCVResult = null; //discard any stored CV result since we are going back and not submitting, this prevents stale data from being submitted if user goes back but then later decides to submit without retaking the picture
+            cvResultPopulator?.Clear();
+            ResetLocationRetryCount(); //Reset when user returns to Main Menu
+            SetState(UIState.Idle);
+        }
 
     //Dummy method after Awaiting Analysis timer is hit,replace with real CV response handling once SB's API is live
     //Simulates a CVAnalysisResult so the full ReviewResult flow can be tested end-to-end
@@ -753,12 +788,49 @@ public class MainUIFlowController : MonoBehaviour
 
     #endregion
 
-    #region GPS + API Trigger
+    #region GPS Polling - Auto API Trigger
+    //Called 2s after the Check-In button is pressed. Keeps checking until GPS has a fix (validLocation) and then fires API
+    //Check-in button already disabled to prevent multiple calls
+    private void CheckGPSAndTriggerAPI()
+    {
+        if (locationServiceManager == null || googleMapsServices == null)
+        {
+            SetState(UIState.Error);
+            return;
+        }
+
+        var svcState = locationServiceManager.State;
+        bool isReady = svcState == LocationServiceManager.LocationServiceState.Running
+                       && locationServiceManager.HasValidLocation;
+
+        if (isReady)
+        {
+            SetState(UIState.Loading_API);
+            LocationServiceManager.LocationSnapshot snap = locationServiceManager.LastLocationSnapshot;
+            googleMapsServices.GetActiveLocationName(snap.latitude, snap.longitude, OnRoadNameReceived);
+            return;
+        }
+
+        switch (svcState)
+        {
+            case LocationServiceManager.LocationServiceState.Initializing:
+            case LocationServiceManager.LocationServiceState.Running:
+                Invoke(nameof(CheckGPSAndTriggerAPI), 2f);
+                break;
+
+            case LocationServiceManager.LocationServiceState.Disabled:
+            case LocationServiceManager.LocationServiceState.Failed:
+            default:
+                SetState(UIState.Error);
+                break;
+        }
+    }
+
     //Method for simulating the API response when maps are locked by TestMode.
     private void SimulateAPIResponse()
     {
         SetState(UIState.Loading_API);
-        Invoke("SimulateSuccess", 2f); //Simulate a success message after 2s
+        Invoke(nameof(SimulateSuccess), 2f); //Simulate a success message after 2s
     }
 
     private void SimulateSuccess()
@@ -766,7 +838,7 @@ public class MainUIFlowController : MonoBehaviour
         OnRoadNameReceived(testRoadName);
     }
 
-    #endregion 
+    #endregion
 
     #region API Callback Method
     //Fired by GoogleMapsServices script when we get the road name back from the API, this is where we determine if we go to the Success_WithData or Success_NoData state based on if we have JSON data for that road name or not
@@ -779,10 +851,14 @@ public class MainUIFlowController : MonoBehaviour
             return;
         }
 
-        if (roadName == "ERROR_NO_DATA" || string.IsNullOrEmpty(roadName))
+        if (roadName == "UNNAMED ROAD" || string.IsNullOrEmpty(roadName))
         {
-            SetState(UIState.Error); 
-            Debug.LogWarning("[PanelManager] API call failed due to no data.");
+            float horizontalAccuracy = locationServiceManager != null
+                ? locationServiceManager.LastLocationSnapshot.horizontalAccuracy
+                : 999f; //Fallback: unknown accuracy treated as poor.
+
+            EnterLocationResolutionFailedState(horizontalAccuracy);
+            Debug.LogWarning($"[PanelManager] Road resolution failed. road='{roadName}' accuracy={horizontalAccuracy:F1}m");
             return;
         }
 
@@ -791,6 +867,8 @@ public class MainUIFlowController : MonoBehaviour
         int projectCount = locationJSONLoader != null ? locationJSONLoader.GetProjectCountForRoad(roadNameForState) : 0;
 
         Debug.Log($"[PanelManager] Road: '{roadName}' → matched: '{roadNameForState}' | projects: {projectCount}");
+
+        ResetLocationRetryCount(); //Reset when road resolves successfully
 
         if (projectCount > 0)
             SetState(UIState.Success_WithData, roadNameForState);
@@ -894,11 +972,12 @@ public class MainUIFlowController : MonoBehaviour
         RoadInsetGroup.SetActive(false);
     }
 
-    // ResetButtons(): Disables checkInButton, learnMoreButton, and retryButton.
+    // ResetButtons(): Disables state-machine-controlled buttons before the next state turns on what it needs.
     private void ResetButtons()
     {
         checkInButton.SetActive(false);
         learnMoreButton.SetActive(false);
+        reportIssueButton.SetActive(false);
         retryButton.SetActive(false);
     }
 
@@ -918,6 +997,70 @@ public class MainUIFlowController : MonoBehaviour
             : $"{projectCount} projects";
     }
 
+    private LocationFailureType EvaluateLocationFailureType(float horizontalAccuracy)
+    {
+        // Good accuracy bucket: below 20 meters.
+        if (horizontalAccuracy < 20f)
+        {
+            return LocationFailureType.GoodAccuracyUnknownRoad;
+        }
+
+        // Moderate bucket: 20m to <75m.
+        if (horizontalAccuracy < 75f)
+        {
+            return LocationFailureType.ModerateAccuracyUnknownRoad;
+        }
+
+        // Poor bucket: >=75m.
+        return LocationFailureType.PoorAccuracy;
+    }
+
+    private void EnterLocationResolutionFailedState(float horizontalAccuracy)
+    {
+        currentLocationFailureType = EvaluateLocationFailureType(horizontalAccuracy);
+        SetState(UIState.LocationResolutionFailed);
+    }
+
+    private void ConfigureLocationResolutionFailedUI()
+    {
+        // Keep the Action Card visible because failure guidance is shown in the main status area.
+        if (PanelActionCardPrefab != null) PanelActionCardPrefab.SetActive(true);
+        StatusMessageGroup.SetActive(true);
+        if (buttonSlot != null) buttonSlot.SetActive(true);
+
+        retryButton.SetActive(true);
+        reportIssueButton.SetActive(false);
+
+        switch (currentLocationFailureType)
+        {
+            case LocationFailureType.GoodAccuracyUnknownRoad:
+                SetStatusMessage("Unable to identify road name. Report issue for nearest known area.");
+                reportIssueButton.SetActive(true);
+                break;
+
+            case LocationFailureType.ModerateAccuracyUnknownRoad:
+                if (locationRetryCount == 0)
+                {
+                    SetStatusMessage("Unable to identify road name. Move to a more open area and try again.");
+                }
+                else
+                {
+                    SetStatusMessage("Unable to identify road name. You may continue reporting using the nearest known area.");
+                    reportIssueButton.SetActive(true);
+                }
+                break;
+
+            case LocationFailureType.PoorAccuracy:
+                SetStatusMessage("Location accuracy is too low to identify your position reliably. Move to an open area and try again.");
+                break;
+        }
+    }
+
+    private void ResetLocationRetryCount()
+    {
+        locationRetryCount = 0;
+    }
+
     //Hide all four Statebuttons before each state shows the correct on
     private void HideAllButtons()
     {
@@ -928,6 +1071,7 @@ public class MainUIFlowController : MonoBehaviour
         if (analyseButton != null) analyseButton.SetActive(false);
         if (retakeButton != null) retakeButton.SetActive(false);
         if (submitGrievanceButton != null) submitGrievanceButton.SetActive(false);
+        if(mainMenuButton != null) mainMenuButton.SetActive(false); 
     }
 
     //Show a button and set its interactability

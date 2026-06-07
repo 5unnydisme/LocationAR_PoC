@@ -38,6 +38,22 @@ public class DebugOverlayController : MonoBehaviour
     [Tooltip("Shows Place Details API status - Step 2 (road name result or error)")]
     [SerializeField] private TextMeshProUGUI placesAPIDebugText;
 
+    [Header("Places Diagnostics (Detailed)")]
+    [Tooltip("DEBUG ONLY- candidate by candiate Places API calues for on device testing")]
+    [SerializeField] private TextMeshProUGUI placesCandidateDiagnosticsText;
+
+    [Tooltip("DEBUG ONLY - Candidate 2 Places API values for on-device testing")]
+    [SerializeField] private TextMeshProUGUI placesCandidateTwoDiagnosticsText;
+
+    [Tooltip("DEBUG ONLY - Candidate 3 Places API values for on-device testing")]
+    [SerializeField] private TextMeshProUGUI placesCandidateThreeDiagnosticsText;
+
+    [Tooltip ("DEBUG ONLY - source selected by ExtractBestRoadLabel: route, name or formatted address")]
+    [SerializeField] private TextMeshProUGUI placesSelectedSourceText;
+
+    [Tooltip ("DEBUG ONLY - final label selected by ExtracBestRoadLabel")]
+    [SerializeField] private TextMeshProUGUI placesSelectedResultText; 
+
     [Header("UI State Debug")]
     [Tooltip("Shows the current PanelManager UIState — updated on every state transition")]
     [SerializeField] private TextMeshProUGUI uiStateDebugText;
@@ -83,6 +99,12 @@ public class DebugOverlayController : MonoBehaviour
     private string _placesAPIDebugLine = ""; // set by GoogleMapsServices, Step 2 status
     private string _gpsGateLine = ""; // set by PanelManager after each check-in attempt, e.g. "result=Ok avgAcc=12.3 spread=3.1"
     private string _gpsSamplingDebugLine = ""; // set by LocationServiceManager when stationary fallback accepts a repeated timestamp
+    private string _lastGPSSnapshotDebugBlock = ""; // latest formatted GPS snapshot block for append-style storage confirmation
+    private string _placesCandidateDiagnosticsLine = ""; 
+    private string _placesCandidateTwoDiagnosticsLine = ""; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+    private string _placesCandidateThreeDiagnosticsLine = ""; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+    private string _placesSelectedSourceLine = ""; 
+    private string _placesSelectedResultLine = ""; 
 
     #endregion
 
@@ -181,6 +203,42 @@ public class DebugOverlayController : MonoBehaviour
                 : "Places API: not called yet";
         }
 
+        //Places Detailed Debugging Logs
+        if (placesCandidateDiagnosticsText != null)
+        {
+            placesCandidateDiagnosticsText.text = !string.IsNullOrEmpty(_placesCandidateDiagnosticsLine)
+            ? _placesCandidateDiagnosticsLine
+            : "Candidate 1: not populated yet";
+        }
+
+        if (placesCandidateTwoDiagnosticsText != null)
+        {
+            placesCandidateTwoDiagnosticsText.text = !string.IsNullOrEmpty(_placesCandidateTwoDiagnosticsLine)
+            ? _placesCandidateTwoDiagnosticsLine
+            : "Candidate 2: not populated yet";
+        }
+
+        if (placesCandidateThreeDiagnosticsText != null)
+        {
+            placesCandidateThreeDiagnosticsText.text = !string.IsNullOrEmpty(_placesCandidateThreeDiagnosticsLine)
+            ? _placesCandidateThreeDiagnosticsLine
+            : "Candidate 3: not populated yet";
+        }
+
+        if (placesSelectedSourceText != null)
+        {
+            placesSelectedSourceText.text = !string.IsNullOrEmpty(_placesSelectedSourceLine)
+            ?_placesSelectedSourceLine
+            : "Selected Source: n/a";
+        }
+
+        if (placesSelectedResultText != null)
+        {
+            placesSelectedResultText.text = !string.IsNullOrEmpty(_placesSelectedResultLine)
+            ? _placesSelectedResultLine
+            : "Selected Result: n/a";
+        }
+
         //Show the gpsGate Result 
         if (gpsGateResultText !=null)
         {
@@ -217,6 +275,8 @@ public class DebugOverlayController : MonoBehaviour
                 ? $"GPS Sampling: {_gpsSamplingDebugLine}"
                 : "GPS Sampling: no stationary fallback accepted yet";
         }
+
+    
     }
 
     public void ShowGPSGate(string line)
@@ -237,6 +297,42 @@ public class DebugOverlayController : MonoBehaviour
         gpsSamplingDebugText.text = string.IsNullOrEmpty(line)
             ? "GPS Sampling: no stationary fallback accepted yet"
             : $"GPS Sampling: {line}";
+    }
+
+    public void ShowGPSSnapshotRefreshRequested()
+    {
+        ShowGPSSamplingDebug("GPS already running\nCapturing fresh snapshot");
+    }
+
+    public void ShowGPSSnapshotCaptured(
+        System.DateTime captureTime,
+        double gpsTimestamp,
+        float latitude,
+        float longitude,
+        float horizontalAccuracy)
+    {
+        _lastGPSSnapshotDebugBlock =
+            "GPS SNAPSHOT\n" +
+            $"Capture: {captureTime:HH:mm:ss}\n" +
+            $"GPS Time: {gpsTimestamp:0}\n" +
+            $"Lat: {latitude:F6}\n" +
+            $"Lon: {longitude:F6}\n" +
+            $"Acc: {horizontalAccuracy:F1}m";
+
+        ShowGPSSamplingDebug(_lastGPSSnapshotDebugBlock);
+    }
+
+    public void ShowGPSSnapshotStored(System.DateTime snapshotTime)
+    {
+        string storedBlock =
+            "SNAPSHOT STORED\n" +
+            $"Snapshot Time: {snapshotTime:HH:mm:ss}";
+
+        string combined = string.IsNullOrEmpty(_lastGPSSnapshotDebugBlock)
+            ? storedBlock
+            : _lastGPSSnapshotDebugBlock + "\n" + storedBlock;
+
+        ShowGPSSamplingDebug(combined);
     }
 //Display UI when GPS is working
     private void DisplayRunningState()
@@ -277,7 +373,6 @@ public class DebugOverlayController : MonoBehaviour
         }
 
     }
-
 
 
         //Display UI when GPS is starting up
@@ -354,6 +449,62 @@ public class DebugOverlayController : MonoBehaviour
         else if (step == "places")
             _placesAPIDebugLine = $"Places API: {message}";
     }
+
+    public void ResetPlacesCandidateDebug()
+    {
+        _placesCandidateDiagnosticsLine = "";
+        _placesCandidateTwoDiagnosticsLine = ""; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+        _placesCandidateThreeDiagnosticsLine = ""; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+        _placesSelectedSourceLine = "";
+        _placesSelectedResultLine = "";
+    }
+
+    public void ShowPlacesCandidateDebug(int candidateNumber, int totalCandidates, string placeId, string routeValue, string placeName, string formattedAddress)
+    {
+        string candidateBlock=
+        $"Candidate {candidateNumber}/{totalCandidates}\n"+
+        $"PlaceId: {FormatPlacesDiagnosticsValue(placeId)}\n"+
+        $"Route: {FormatPlacesDiagnosticsValue(routeValue)}\n"+
+        $"Name:{FormatPlacesDiagnosticsValue(placeName)}\n"+
+        $"Formatted Address:{FormatPlacesDiagnosticsValue (formattedAddress)}";
+
+        // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+        if (candidateNumber == 1)
+        {
+            _placesCandidateDiagnosticsLine = candidateBlock;
+            return;
+        }
+
+        // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+        if (candidateNumber == 2)
+        {
+            _placesCandidateTwoDiagnosticsLine = candidateBlock;
+            return;
+        }
+
+        // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+        if (candidateNumber == 3)
+        {
+            _placesCandidateThreeDiagnosticsLine = candidateBlock;
+            return;
+        }
+
+        // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+        _placesCandidateThreeDiagnosticsLine = candidateBlock;
+    }
+
+    public void ShowPlacesSelectionDebug(string selectedSource, string selectedResult)
+    {
+        _placesSelectedSourceLine = $"Selected Source: {FormatPlacesDiagnosticsValue(selectedSource)}";
+        _placesSelectedResultLine = $"Selected Result: {FormatPlacesDiagnosticsValue(selectedResult)}";
+
+    }
+
+    private string FormatPlacesDiagnosticsValue (string value)
+    {
+        return string.IsNullOrEmpty (value) ? "(none)" : value;
+    }
+
 
     // Called by PanelManager.SetState on every state transition
     // state: the UIState enum name as a string (e.g. "Loading_API", "Error")

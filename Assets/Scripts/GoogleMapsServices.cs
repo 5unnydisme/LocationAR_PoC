@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking; 
 
@@ -20,6 +21,10 @@ public class GoogleMapsServices : MonoBehaviour
     private const string PLACE_DETAILS_URL  = "https://maps.googleapis.com/maps/api/place/details/json";
     private const int MAX_PLACE_ID_CANDIDATES = 3;
 
+    private int _currentCandidateNumberForDebug; //Debug
+    private int _currentCandidateTotalForDebug; //Debug
+    private bool _hasLoggedSelectedResultForCurrentLookup; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+
     //Stores the most recently resolved road name- readable by other scripts
     public string ActiveLocationName {get;private set;}="";
 
@@ -27,7 +32,7 @@ public class GoogleMapsServices : MonoBehaviour
     // can be mapped onto specific C# classes, making them into objects that can be easily used in code 
 
     //Maps to: {"snappedPoints": [{"placeId":"...}]}
-    [System.Serializable] 
+     [System.Serializable] 
     private class SnappedPoint
     {
         public string placeId;
@@ -68,6 +73,8 @@ public class GoogleMapsServices : MonoBehaviour
     public void GetActiveLocationName(double latitude, double longitude, System.Action<string> onComplete) //Callback means that when this is done, call this function and give the result. This is public so that later other scripts can use this value
     {
         Debug.Log($"[GoogleMapsService] Starting lookup for Lat={latitude:F6}, Lon={longitude:F6}");
+        _hasLoggedSelectedResultForCurrentLookup = false; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+        debugOverlayController?.ResetPlacesCandidateDebug(); //Reset candidate debug info in the overlay at the start of a new lookup
         StartCoroutine(GetNearestRoadCoroutine(latitude, longitude, onComplete));
     }
 
@@ -126,13 +133,26 @@ public class GoogleMapsServices : MonoBehaviour
             Debug.Log($"[GoogleMapsService] Step 1 complete - trying {candidateCount} placeId candidate(s)");
             debugOverlayController?.ShowAPIDebug("roads", $"candidates: {candidateCount}");
 
+            string firstResolvedRoadName = null; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+
             for (int i = 0; i < candidateCount; i++)
             {
                 string placeId = response.snappedPoints[i] != null ? response.snappedPoints[i].placeId : null;
                 if (string.IsNullOrEmpty(placeId))
                 {
+                    // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+                    debugOverlayController?.ShowPlacesCandidateDebug(
+                        i + 1,
+                        candidateCount,
+                        "(missing placeId)",
+                        null,
+                        null,
+                        null
+                    );
                     continue;
                 }
+                _currentCandidateNumberForDebug = i + 1; //can remove after debug
+                _currentCandidateTotalForDebug = candidateCount; //can remove after debug
 
                 Debug.Log($"[GoogleMapsService] Trying candidate {i + 1}/{candidateCount} placeId: {placeId}");
                 debugOverlayController?.ShowAPIDebug("roads", $"candidate {i + 1}/{candidateCount}: {placeId}");
@@ -148,18 +168,33 @@ public class GoogleMapsServices : MonoBehaviour
 
                 if (hardFailure)
                 {
-                    ActiveLocationName = "ERROR_NETWORK";
-                    onComplete?.Invoke(ActiveLocationName);
-                    yield break;
+                    if (string.IsNullOrEmpty(firstResolvedRoadName))
+                    {
+                        ActiveLocationName = "ERROR_NETWORK";
+                        onComplete?.Invoke(ActiveLocationName);
+                        yield break;
+                    }
+
+                    // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+                    Debug.LogWarning("[GoogleMapsService] Ignoring candidate hard-failure after first successful label for diagnostics pass");
+                    continue;
                 }
 
-                if (!string.IsNullOrEmpty(resolvedRoadName))
+                if (string.IsNullOrEmpty(firstResolvedRoadName) && !string.IsNullOrEmpty(resolvedRoadName))
                 {
-                    ActiveLocationName = resolvedRoadName;
-                    onComplete?.Invoke(ActiveLocationName);
-                    yield break;
+                    firstResolvedRoadName = resolvedRoadName;
                 }
             }
+
+            if (!string.IsNullOrEmpty(firstResolvedRoadName))
+            {
+                ActiveLocationName = firstResolvedRoadName;
+                onComplete?.Invoke(ActiveLocationName);
+                yield break;
+            }
+
+            // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+            debugOverlayController?.ShowPlacesSelectionDebug("none", null);
 
             Debug.LogWarning("[GoogleMapsService] No usable road name found from candidate placeIds");
             debugOverlayController?.ShowAPIDebug("places", "NO USABLE ROAD NAME after candidate attempts");
@@ -195,6 +230,14 @@ public class GoogleMapsServices : MonoBehaviour
             {
                 Debug.LogError($"[GoogleMapsService] Place Details API failed:{request.error}");
                 debugOverlayController?.ShowAPIDebug("places", $"FAILED: {request.error}");
+                debugOverlayController?.ShowPlacesCandidateDebug(
+                    _currentCandidateNumberForDebug, //debug only
+                    _currentCandidateTotalForDebug, //Debug only
+                    placeId, //Debugonly
+                    "UNAVAILABLE (request failed)",
+                    "UNAVAILABLE (request failed)",
+                    "UNAVAILABLE (request failed)"
+                );
                 onComplete?.Invoke(null, true);
                 yield break;
             }
@@ -203,7 +246,26 @@ public class GoogleMapsServices : MonoBehaviour
             Debug.Log($"[GoogleMapsService] Place Details raw response:{json}"); //our sanity check to see what the raw json data from the API looks like in the console
 
             PlaceDetailsResponse response = JsonUtility.FromJson<PlaceDetailsResponse>(json); //parsing the json data into the containers we set-up earlier
+            string routeValueForDebug = null; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+            string nameValueForDebug = null; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+            string formattedAddressForDebug = null; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
 
+            if (response != null && response.result != null)
+            {
+                routeValueForDebug = ExtractRouteFromAddressComponents(response.result.address_components); // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+                nameValueForDebug = response.result.name; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+                formattedAddressForDebug = response.result.formatted_address; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+            }
+
+            debugOverlayController?.ShowPlacesCandidateDebug(
+                _currentCandidateNumberForDebug, // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+                _currentCandidateTotalForDebug, // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+                placeId, // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+                routeValueForDebug, // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+                nameValueForDebug, // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+                formattedAddressForDebug // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+            );
+            
             //Check the API status field- OK means success.
             if (response == null || response.status != "OK" || response.result == null)
             {
@@ -215,6 +277,12 @@ public class GoogleMapsServices : MonoBehaviour
 
             string source;
             string resolvedRoadName = ExtractBestRoadLabel(response, out source);
+            if (!_hasLoggedSelectedResultForCurrentLookup && !string.IsNullOrEmpty(resolvedRoadName))
+            {
+                // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+                debugOverlayController?.ShowPlacesSelectionDebug(source, resolvedRoadName);
+                _hasLoggedSelectedResultForCurrentLookup = true;
+            }
             if (string.IsNullOrEmpty(resolvedRoadName))
             {
                 Debug.LogWarning($"[GoogleMapsService] Place Details had no usable road label. Status: {response.status}");
