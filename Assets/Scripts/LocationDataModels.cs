@@ -11,6 +11,14 @@ public class CVAnalysisResult //placeholder for now, will change based on SB
     public bool detected;
     public string model_name;
 }
+
+[Serializable]
+public class PredictionResponse
+{
+    public bool detected; 
+    public string model_name;
+}
+
 [Serializable]
 public class InfrastructureDetails
 {

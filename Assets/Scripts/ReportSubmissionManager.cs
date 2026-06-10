@@ -52,12 +52,6 @@ public class ReportSubmissionManager : MonoBehaviour
         WWWForm form = new WWWForm();
 
         // Text fields — metadata
-        //TODO: Delete the commented out metadata, will be sending these with submit button.
-        // form.AddField("road_name", roadName ?? "UNKNOWN");
-        // form.AddField("latitude", snapshot.latitude.ToString("F6"));
-        // form.AddField("longitude", snapshot.longitude.ToString("F6"));
-        // form.AddField("horizontal_accuracy", snapshot.horizontalAccuracy.ToString("F2"));
-        // form.AddField("timestamp", snapshot.timestamp.ToString("o")); // ISO 8601 format
         form.AddField("model_name", modelName); //tells the CV Server which model to use for analysis
 
         // Binary field — the image
@@ -108,18 +102,38 @@ public class ReportSubmissionManager : MonoBehaviour
                 yield break;
             }
 
-            // Step 5: Handle success — SMOKE TEST ONLY
-            // We have a 200 from the real CV endpoint. We are NOT parsing the response yet:
-            // the PredictionResponse schema (detected, detections[], bbox, etc.) needs to be
-            // confirmed with the CV engineer before we rewrite CVAnalysisResult and the
-            // populator. For now we log the raw body for inspection and hand back null.
-            // PanelManager's onSuccess lambda treats null as "use the mock CVAnalysisResult"
-            // so the rest of the demo flow keeps working.
-            // TODO: parse responseBody into CVAnalysisResult once the PredictionResponse
-            // field names are confirmed. Drop the null fallback in PanelManager at the same time.
-            Debug.Log($"[ReportSubmissionManager] CV 200 OK — raw body: {responseBody}");
-            debugOverlayController?.ShowCVAPIResult($"200 OK | bytes={responseBody.Length}");
-            onSuccess?.Invoke(null, request.responseCode.ToString());
+            // Step 5: Handle success - actual response
+            if (string.IsNullOrWhiteSpace (responseBody))
+            {
+                onSuccess?.Invoke(null, request.responseCode.ToString());
+                yield break;
+            }
+
+            PredictionResponse parsed = null;
+            try
+            {
+                parsed = JsonUtility.FromJson<PredictionResponse>(responseBody);
+            }
+            catch (System.Exception e)
+            {
+                string parseError = $"[ReportSubmissionManager] Failed to parse CV response:{e.Message} | body: {responseBody}";
+                Debug.LogWarning (parseError);
+                debugOverlayController?.ShowCVAPIResult(parseError);
+                onSuccess?.Invoke(null, request.responseCode.ToString());
+                yield break;
+            }
+
+            CVAnalysisResult result = new CVAnalysisResult
+            {
+                detected = parsed.detected,
+                model_name = parsed.model_name
+            };
+
+            string successMsg =
+            $"[ReportSubmissionManager] Parsed 200 OK - detected ={parsed.detected} model={parsed.model_name}";
+            Debug.Log(successMsg);
+            debugOverlayController?.ShowCVAPIResult(successMsg);
+            onSuccess?.Invoke(result, request.responseCode.ToString());
         }
     }
 }

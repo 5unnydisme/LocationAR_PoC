@@ -74,11 +74,11 @@ public class CVResultPopulator : MonoBehaviour
         string roadValue = cachedRoadName;
         string issueValue = Sanitize(data.defect_type);
         bool isDetected = data.detected;
-        string statusText = isDetected ? "Detected" : "Not Detected";
+        string statusText = isDetected ? "detected" : "not detected";
         string timestampValue = locationServiceManager.LastLocationSnapshot.timestamp.ToString("yyyy-MM-dd HH:mm");
         string grievanceLineValue = isDetected
             ? issueValue + " detected at " + roadValue + " at " + timestampValue + "."
-            : "Retake photo again and choose matching issue type.";
+            : "No " + issueValue + " detected at " + roadValue + " as of " + timestampValue + ".";
 
         SetText(issueTypeHeaderText, issueTypeHeaderLabel);
         SetText(grievanceHeaderText, grievanceHeaderLabel);

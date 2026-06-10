@@ -30,7 +30,6 @@ public class MainUIFlowController : MonoBehaviour
         CaptureImage,
         Success_NoData,
         LocationResolutionFailed,
-        Error_GPSAccuracy,
         Error 
     }
 
@@ -73,6 +72,7 @@ public class MainUIFlowController : MonoBehaviour
     public GameObject RoadInsetGroup;
     [Tooltip("The panel which shows the road header information")]
     [SerializeField] private GameObject roadHeaderPanel;
+    [SerializeField] private GameObject confirmationPanel; //Panel that says Are you sure after second round of analysis.
 
     // [Tooltip("The parent panel that contains UI elements for image capture")]
     // [SerializeField] private GameObject imageCapturePanel;
@@ -102,6 +102,8 @@ public class MainUIFlowController : MonoBehaviour
     [SerializeField] private GameObject analyseButton; //confirm and submit image for analysis
     [SerializeField] private GameObject retakeButton; //discards the captures image and goes back to live capture state
     [SerializeField] private GameObject captureButton; //capture image button
+    [SerializeField] private GameObject backToPreviewButton; //returns to preview state to reselect issue type
+
 
     [Header("State UI Elements")]
     [Tooltip("Loading spinner shown when API call is in progress")]
@@ -171,6 +173,7 @@ public class MainUIFlowController : MonoBehaviour
     private CVAnalysisResult currentCVResult = null; //Stores the CV result between ReviewResult and the submission
     private int locationRetryCount = 0; //Increments only when retry is pressed from LocationResolutionFailed
     private LocationFailureType currentLocationFailureType = LocationFailureType.GoodAccuracyUnknownRoad;
+    private int notDetectedCount = 0; //counts how many times the CV analysis has returned not detected for an issue type
     #endregion
 
     #region Unity Lifecycle Methods
@@ -197,6 +200,7 @@ public class MainUIFlowController : MonoBehaviour
     private void SetupInitialUI()
     {
         HideAllPanels(); //Needed for hiding the logo panel 
+        HideAllButtons();
         if (loadingSpinner != null) loadingSpinner.SetActive(false); //Ensures that the spinner is hidden at the beginning
         logoScreen.SetActive(true);
         if (PanelActionCardPrefab != null) PanelActionCardPrefab.SetActive(true); //Show the main action card panel which will be the base for showing the status messages and buttons in the Idle state
@@ -235,6 +239,7 @@ public class MainUIFlowController : MonoBehaviour
                 
                 StatusMessageGroup.SetActive(true);
                 checkInButton.SetActive(true);
+                ShowButton (checkInButton, interactable: true);
                 SetStatusMessage("Tap on check-in button to see information about infrastructure near you.");
                 break;
 
@@ -267,6 +272,13 @@ public class MainUIFlowController : MonoBehaviour
                 SetRoadInset(currentRoadName, projectCount);
                 break;
 
+            case UIState.Success_NoData:
+                StatusMessageGroup.SetActive(true);
+                if (buttonSlot != null) buttonSlot.SetActive(false); //Hides the buttons to panel scales correctly
+                reportIssueButton.SetActive(true);
+                SetStatusMessage($"No projects listed for \"{currentRoadName}\".");
+                break;
+
             case UIState.CaptureImage:
                 reportIssuePanel.SetActive(true); //Show the main panel housing the report flow elements
                 SetReportFlowState(ReportFlowState.LiveCapture); //Set the sub-state for the report flow to live capture, which will show the relevant UI elements for that phase
@@ -281,12 +293,6 @@ public class MainUIFlowController : MonoBehaviour
                 retryButton.SetActive(true);
                 SetStatusMessage("An error occurred. Please try again.");
                 break;
-
-            case UIState.Error_GPSAccuracy:
-                StatusMessageGroup.SetActive(true);
-                retryButton.SetActive(true);
-                SetStatusMessage("GPS accuracy is too low. Try again in an open area.");
-                break;
         }
 
         // Update the debug overlay with the new state and optional road name
@@ -300,7 +306,8 @@ public class MainUIFlowController : MonoBehaviour
     private void SetReportFlowState(ReportFlowState reportState)
     {
         currentReportFlowState = reportState;
-        // Keep the parent panel alive across all report substates.
+        // Keep the parent panel alive across all report substates. Hide the panelaction card
+        if (PanelActionCardPrefab != null) PanelActionCardPrefab.SetActive(false);
         if (reportIssuePanel != null) reportIssuePanel.SetActive(true);
         if (buttonSlot != null) buttonSlot.SetActive(true);
         HideReportSubPanels(); //Cleares the panels specific to report flow substates
@@ -355,19 +362,37 @@ public class MainUIFlowController : MonoBehaviour
                 previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
                 //instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
                 //This is where we will show the results from the CV analysis
-                bool canSubmit = currentCVResult != null && currentCVResult.detected;
+               
+               bool canSubmit = currentCVResult != null && currentCVResult.detected;
+               if (canSubmit)
+                {
+                    notDetectedCount = 0; //Resets on a pass where issue is detected
+                }
+
+                else
+                {
+                    notDetectedCount++;
+                }
+
+                bool isSecondNotDetected = !canSubmit && notDetectedCount >=2;
                 if (canSubmit)
                 {
-                    SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint"); //Placeholder, will replace with real results from the CV analysis later
+                    SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint");
+                }
+                else if (notDetectedCount ==1)
+                {
+                    SetImageCaptureInstructionText("Issue type not detected. Make sure issue type matches the submitted image.");
                 }
                 else
                 {
-                    SetImageCaptureInstructionText("Issue type not detected. Retake photo again and choose matching issue type.");
+                    SetImageCaptureInstructionText ("Issue type still not detected, press submit to file a grievance report anyway.");
                 }
-                //if (loadingSpinner != null) loadingSpinner.SetActive(false);
+
                 if (reviewResultsPanel != null && !reviewResultsPanel.activeSelf) reviewResultsPanel.SetActive(true); //Keep active if already visible to avoid unnecessary relayout churn.
-                ShowButton(retakeButton, interactable: true);
-                ShowButton(submitGrievanceButton, interactable: canSubmit); //Submit button is visible but disabled when issue is not detected.
+                //ShowButton(retakeButton, interactable: true);
+                ShowButton(submitGrievanceButton, interactable: canSubmit || isSecondNotDetected);
+                if (backToPreviewButton != null) backToPreviewButton.SetActive(!canSubmit);
+                if (confirmationPanel != null) confirmationPanel.SetActive(isSecondNotDetected);
                 break;
 
             case ReportFlowState.SubmittingGrievance:
@@ -385,6 +410,9 @@ public class MainUIFlowController : MonoBehaviour
                 //Placeholder - wire up when submission backend is ready, this is where we will show the complaint lodged successfully
                 //instructionpanel.SetActive(true);
                 SetImageCaptureInstructionText("Complaint submitted");
+                if (PanelActionCardPrefab != null) PanelActionCardPrefab.SetActive(true);
+                StatusMessageGroup.SetActive(true);
+                SetStatusMessage("Press main menu to return to main page.");
                 //if (successSubmissionPanel != null) successSubmissionPanel.SetActive(true);
                 ShowButton(mainMenuButton, interactable: true); //Show the back button to let user return to main page after seeing success message
                 break;
@@ -451,8 +479,8 @@ public class MainUIFlowController : MonoBehaviour
         //             return;
         //         }
 
-        //         Debug.Log($"[PanelManager] gpsGate {gateLine} → nextState=Error_GPSAccuracy");
-        //         SetState(UIState.Error_GPSAccuracy);
+        //         Debug.Log($"[PanelManager] gpsGate {gateLine} → nextState=Error");
+        //         SetState(UIState.Error);
         //     });
         
         // }
@@ -545,7 +573,7 @@ public class MainUIFlowController : MonoBehaviour
         currentCVResult = null; //Discard any previously stored result so stale data cannot be submitted
         cvResultPopulator?.Clear();
         modelDropdownController?.ResetSelection();
-
+        notDetectedCount = 0; //Reset the not detected count when user clicks a new picture for analysis
         SetReportFlowState(ReportFlowState.LiveCapture); //Go back to the live capture state to let user try taking the picture again
     }
 
@@ -637,6 +665,7 @@ public class MainUIFlowController : MonoBehaviour
 
     public void OnSubmitGrievanceButtonPressed()
     {
+        if (confirmationPanel != null) confirmationPanel.SetActive(false);
         if (grievanceSubmissionManager == null)//Main null check
         {
             debugOverlayController?.ShowGrievanceSubmitResult("[PanelManager] GrievanceSubmissionManager is not assigned in the Inspector");
@@ -723,44 +752,55 @@ public class MainUIFlowController : MonoBehaviour
             }
             currentCVResult = null; //discard any stored CV result since we are going back and not submitting, this prevents stale data from being submitted if user goes back but then later decides to submit without retaking the picture
             cvResultPopulator?.Clear();
+            notDetectedCount = 0; //Reset the not detected count on return to main menu
+            modelDropdownController?.ResetSelection();
             ResetLocationRetryCount(); //Reset when user returns to Main Menu
             SetState(UIState.Idle);
         }
 
+        public void OnBackToPreviewButtonPressed()
+        {
+            modelDropdownController?.ResetSelection();
+            SetReportFlowState(ReportFlowState.Preview);
+            debugOverlayController?.ShowReportFlowState("[PanelManager] Back to Preview — notDetectedCount=" + notDetectedCount);
+        }
+
     //Dummy method after Awaiting Analysis timer is hit,replace with real CV response handling once SB's API is live
     //Simulates a CVAnalysisResult so the full ReviewResult flow can be tested end-to-end
-    private void OnAnalysisComplete()
-    {
-        if (!isFullMock)
+        private void OnAnalysisComplete()
         {
-            return;
+            if (!isFullMock)
+            {
+                return;
+            }
+
+            CVAnalysisResult fakeResult = BuildMockCVResult();
+            currentCVResult = fakeResult; //Store the fake result so it cane be it can be submitted if user taps submit without retaking
+
+            string selectedIssueTypeDisplay = modelDropdownController != null ? modelDropdownController.SelectedModelDisplayName : string.Empty;
+            if (!string.IsNullOrEmpty(selectedIssueTypeDisplay))
+            {
+                fakeResult.defect_type = selectedIssueTypeDisplay;
+            }
+
+            // Activate ReviewResult first so first-time layout measures on an active hierarchy.
+            SetReportFlowState(ReportFlowState.ReviewResult);
+            cvResultPopulator.Populate(fakeResult, string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName);
         }
 
-        CVAnalysisResult fakeResult = BuildMockCVResult();
-        currentCVResult = fakeResult; //Store the fake result so it cane be it can be submitted if user taps submit without retaking
-
-        string selectedIssueTypeDisplay = modelDropdownController != null ? modelDropdownController.SelectedModelDisplayName : string.Empty;
-        if (!string.IsNullOrEmpty(selectedIssueTypeDisplay))
+        private CVAnalysisResult BuildMockCVResult()
         {
-            fakeResult.defect_type = selectedIssueTypeDisplay;
+            return new CVAnalysisResult
+            {
+                defect_type = "Pothole",
+                detected = true,
+                model_name = "potholes",
+                //confidence = 0.92f,
+                //message = "Large pothole detected, needs immediate attention for repair."
+            };
         }
 
-        // Activate ReviewResult first so first-time layout measures on an active hierarchy.
-        SetReportFlowState(ReportFlowState.ReviewResult);
-        cvResultPopulator.Populate(fakeResult, string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName);
-    }
 
-    private CVAnalysisResult BuildMockCVResult()
-    {
-        return new CVAnalysisResult
-        {
-            defect_type = "Pothole",
-            detected = true,
-            model_name = "potholes",
-            //confidence = 0.92f,
-            //message = "Large pothole detected, needs immediate attention for repair."
-        };
-    }
 
 
     //Retry button OnClick, will restart the full flow 
@@ -768,8 +808,8 @@ public class MainUIFlowController : MonoBehaviour
     // {
     //    switch (currentState)
     //     {
-    //         case UIState.Error_GPSAccuracy:
-    //             Debug.Log("[PanelManager] retry from=Error_GPSAccuracy → Loading_LocationSampling");
+    //         case UIState.Error:
+    //             Debug.Log("[PanelManager] retry from=Error → Loading_LocationSampling");
     //             if (locationServiceManager == null || googleMapsServices == null)
     //             {
     //                 SetState(UIState.Error);
@@ -851,7 +891,7 @@ public class MainUIFlowController : MonoBehaviour
             return;
         }
 
-        if (roadName == "UNNAMED ROAD" || string.IsNullOrEmpty(roadName))
+        if (roadName == "ERROR_NO_DATA" || string.IsNullOrEmpty(roadName)  || string.Equals(roadName.Trim(), "Unnamed Road", System.StringComparison.OrdinalIgnoreCase))
         {
             float horizontalAccuracy = locationServiceManager != null
                 ? locationServiceManager.LastLocationSnapshot.horizontalAccuracy
@@ -962,6 +1002,7 @@ public class MainUIFlowController : MonoBehaviour
         ResetMainCardGroups();
         ResetButtons();
         if (reportIssuePanel != null) reportIssuePanel.SetActive(false);
+        if (projectCardPrefab != null) projectCardPrefab.SetActive(false);
     }
 
     // ResetMainCardGroups(): Disables statusMessageGroup, loadingMessageGroup, and roadInsetGroup.
@@ -979,6 +1020,7 @@ public class MainUIFlowController : MonoBehaviour
         learnMoreButton.SetActive(false);
         reportIssueButton.SetActive(false);
         retryButton.SetActive(false);
+        mainMenuButton.SetActive(false);
     }
 
     // Helper Setter Methods
@@ -1006,7 +1048,7 @@ public class MainUIFlowController : MonoBehaviour
         }
 
         // Moderate bucket: 20m to <75m.
-        if (horizontalAccuracy < 75f)
+        if (horizontalAccuracy < 125f)
         {
             return LocationFailureType.ModerateAccuracyUnknownRoad;
         }
@@ -1046,6 +1088,7 @@ public class MainUIFlowController : MonoBehaviour
                 else
                 {
                     SetStatusMessage("Unable to identify road name. You may continue reporting using the nearest known area.");
+                    if (buttonSlot != null) buttonSlot.SetActive(false); //Hide the retry button after the first retry attempt to encourage user to continue with reporting even if we don't have a road name, since we know from testing that many locations will not resolve but can still be reported on successfully, and we don't want users to get stuck in a loop of retrying without success. This also simplifies the UI after the first retry by removing the option that is unlikely to succeed, and focuses user on moving forward with reporting.
                     reportIssueButton.SetActive(true);
                 }
                 break;
@@ -1072,6 +1115,7 @@ public class MainUIFlowController : MonoBehaviour
         if (retakeButton != null) retakeButton.SetActive(false);
         if (submitGrievanceButton != null) submitGrievanceButton.SetActive(false);
         if(mainMenuButton != null) mainMenuButton.SetActive(false); 
+        if (backToPreviewButton != null) backToPreviewButton.SetActive(false);
     }
 
     //Show a button and set its interactability
@@ -1100,6 +1144,7 @@ public class MainUIFlowController : MonoBehaviour
         if (modelDropdownPanel != null) modelDropdownPanel.SetActive(false);
         // if (awaitingPanel != null) awaitingPanel.SetActive(false);
         if (reviewResultsPanel != null) reviewResultsPanel.SetActive(false);
+        if (confirmationPanel != null) confirmationPanel.SetActive(false);
         // if(successSubmissionPanel != null) successSubmissionPanel.SetActive(false); // HACK: force-hide success panel when leaving report flow
     }
     #endregion
