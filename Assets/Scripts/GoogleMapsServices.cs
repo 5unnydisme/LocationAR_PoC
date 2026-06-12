@@ -24,9 +24,13 @@ public class GoogleMapsServices : MonoBehaviour
     private int _currentCandidateNumberForDebug; //Debug
     private int _currentCandidateTotalForDebug; //Debug
     private bool _hasLoggedSelectedResultForCurrentLookup; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+    private bool _currentCandidateUsedUnnamedRoadFallback;
+    private string _currentCandidateNearestKnownAreaName;
 
     //Stores the most recently resolved road name- readable by other scripts
     public string ActiveLocationName {get;private set;}="";
+    public bool UsedUnnamedRoadFallback { get; private set; }
+    public string UnnamedRoadFallbackAreaName { get; private set; } = "";
 
     //API Response Data Classes, this is so that the JSON info that comes in from the API 
     // can be mapped onto specific C# classes, making them into objects that can be easily used in code 
@@ -74,6 +78,10 @@ public class GoogleMapsServices : MonoBehaviour
     {
         Debug.Log($"[GoogleMapsService] Starting lookup for Lat={latitude:F6}, Lon={longitude:F6}");
         _hasLoggedSelectedResultForCurrentLookup = false; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+        UsedUnnamedRoadFallback = false;
+        UnnamedRoadFallbackAreaName = "";
+        _currentCandidateUsedUnnamedRoadFallback = false;
+        _currentCandidateNearestKnownAreaName = null;
         debugOverlayController?.ResetPlacesCandidateDebug(); //Reset candidate debug info in the overlay at the start of a new lookup
         StartCoroutine(GetNearestRoadCoroutine(latitude, longitude, onComplete));
     }
@@ -134,6 +142,8 @@ public class GoogleMapsServices : MonoBehaviour
             debugOverlayController?.ShowAPIDebug("roads", $"candidates: {candidateCount}");
 
             string firstResolvedRoadName = null; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+            bool firstResolvedUsedUnnamedRoadFallback = false;
+            string firstResolvedNearestKnownAreaName = null;
 
             for (int i = 0; i < candidateCount; i++)
             {
@@ -156,6 +166,9 @@ public class GoogleMapsServices : MonoBehaviour
 
                 Debug.Log($"[GoogleMapsService] Trying candidate {i + 1}/{candidateCount} placeId: {placeId}");
                 debugOverlayController?.ShowAPIDebug("roads", $"candidate {i + 1}/{candidateCount}: {placeId}");
+
+                _currentCandidateUsedUnnamedRoadFallback = false;
+                _currentCandidateNearestKnownAreaName = null;
 
                 string resolvedRoadName = null;
                 bool hardFailure = false;
@@ -183,11 +196,17 @@ public class GoogleMapsServices : MonoBehaviour
                 if (string.IsNullOrEmpty(firstResolvedRoadName) && !string.IsNullOrEmpty(resolvedRoadName))
                 {
                     firstResolvedRoadName = resolvedRoadName;
+                    firstResolvedUsedUnnamedRoadFallback = _currentCandidateUsedUnnamedRoadFallback;
+                    firstResolvedNearestKnownAreaName = _currentCandidateNearestKnownAreaName;
                 }
             }
 
             if (!string.IsNullOrEmpty(firstResolvedRoadName))
             {
+                UsedUnnamedRoadFallback = firstResolvedUsedUnnamedRoadFallback;
+                UnnamedRoadFallbackAreaName = string.IsNullOrEmpty(firstResolvedNearestKnownAreaName)
+                    ? ""
+                    : firstResolvedNearestKnownAreaName;
                 ActiveLocationName = firstResolvedRoadName;
                 onComplete?.Invoke(ActiveLocationName);
                 yield break;
@@ -208,6 +227,9 @@ public class GoogleMapsServices : MonoBehaviour
     // onComplete: roadNameOrNull, hardFailure
     private IEnumerator TryGetRoadNameFromPlaceIdCoroutine(string placeId, System.Action<string, bool> onComplete)
     {
+        _currentCandidateUsedUnnamedRoadFallback = false;
+        _currentCandidateNearestKnownAreaName = null;
+
         //Build the Place Details request URL
         // Include route-capable data before fallback to plain place name.
         string url = $"{PLACE_DETAILS_URL}?place_id={placeId}&fields=name,formatted_address,address_component&key={apiKey}";
@@ -309,26 +331,56 @@ public class GoogleMapsServices : MonoBehaviour
         string routeName = ExtractRouteFromAddressComponents(response.result.address_components);
         if (!string.IsNullOrEmpty(routeName))
         {
-            source = "route";
-            return routeName;
+            string normalizedRouteName = routeName.Trim();
+            bool isUnnamedRoadRoute = string.Equals(normalizedRouteName, "Unnamed Road", System.StringComparison.OrdinalIgnoreCase);
+
+            // If route is a placeholder and formatted_address exists, allow fallback logic to choose a better label.
+            if (!isUnnamedRoadRoute || string.IsNullOrEmpty(response.result.formatted_address))
+            {
+                source = "route";
+                return normalizedRouteName;
+            }
         }
 
         if (!string.IsNullOrEmpty(response.result.name))
         {
-            source = "name";
-            return response.result.name;
+            string placeName = response.result.name.Trim();
+            bool isUnnamedRoadName = string.Equals(placeName, "Unnamed Road", System.StringComparison.OrdinalIgnoreCase);
+
+            // If name is a placeholder and formatted_address exists, allow fallback logic to choose a better label.
+            if (!isUnnamedRoadName || string.IsNullOrEmpty(response.result.formatted_address))
+            {
+                source = "name";
+                return placeName;
+            }
         }
 
         if (!string.IsNullOrEmpty(response.result.formatted_address))
         {
             source = "formatted_address";
-            int commaIndex = response.result.formatted_address.IndexOf(',');
-            if (commaIndex > 0)
+            string [] segments = response.result.formatted_address.Split(',');
+            if (segments.Length == 0)
             {
-                return response.result.formatted_address.Substring(0, commaIndex).Trim();
+                return response.result.formatted_address.Trim();
             }
 
-            return response.result.formatted_address.Trim();
+            string firstSegment = segments[0].Trim();
+            if (segments.Length == 1)
+            {
+                return firstSegment;
+            }
+
+            if (string.Equals(firstSegment,"Unnamed Road", System.StringComparison.OrdinalIgnoreCase))
+            {
+                string secondSegment = segments[1].Trim();
+                if (!string.IsNullOrEmpty(secondSegment))
+                {
+                    _currentCandidateUsedUnnamedRoadFallback = true;
+                    _currentCandidateNearestKnownAreaName = secondSegment;
+                    return secondSegment;
+                }
+            }
+            return firstSegment;
         }
 
         return null;

@@ -173,6 +173,7 @@ public class MainUIFlowController : MonoBehaviour
     private CVAnalysisResult currentCVResult = null; //Stores the CV result between ReviewResult and the submission
     private int locationRetryCount = 0; //Increments only when retry is pressed from LocationResolutionFailed
     private LocationFailureType currentLocationFailureType = LocationFailureType.GoodAccuracyUnknownRoad;
+    private string locationResolutionNearestKnownAreaName = null;
     private int notDetectedCount = 0; //counts how many times the CV analysis has returned not detected for an issue type
     #endregion
 
@@ -233,17 +234,22 @@ public class MainUIFlowController : MonoBehaviour
         switch (currentState)
         {
             case UIState.Idle:
+                if (loadingSpinner != null) loadingSpinner.SetActive(false);
+
                 if (logoScreen != null) logoScreen.SetActive(true);
                 if (PanelActionCardPrefab != null) PanelActionCardPrefab.SetActive(true);
                 if (buttonSlot != null) buttonSlot.SetActive(true);
                 
                 StatusMessageGroup.SetActive(true);
-                checkInButton.SetActive(true);
                 ShowButton (checkInButton, interactable: true);
+                if (retryButton != null) retryButton.SetActive(false); //Ensures that retry button not visible here
                 SetStatusMessage("Tap on check-in button to see information about infrastructure near you.");
+
+                RebuildIdleCardLayout();
                 break;
 
             case UIState.Loading_Location:
+                if (logoScreen != null) logoScreen.SetActive(true);
                 LoadingMessageGroup.SetActive(true);
                 SetLoadingMessage("Getting your location", "Please wait a moment...");
                 if (buttonSlot != null) buttonSlot.SetActive(false); //Hides the buttons to prevent height messup
@@ -256,13 +262,17 @@ public class MainUIFlowController : MonoBehaviour
             //     break;
 
             case UIState.Loading_API:
+                if (logoScreen != null) logoScreen.SetActive(true);
+                if (loadingSpinner != null) loadingSpinner.SetActive(false);
                 LoadingMessageGroup.SetActive(true);
-                //if (loadingSpinner != null) loadingSpinner.SetActive(true);
+                if (loadingSpinner != null) loadingSpinner.SetActive(true);
                 if (buttonSlot != null) buttonSlot.SetActive(false); //Hides the buttons to prevent height messup
                 //SetLoadingMessage("Contacting server...", "Fetching road data.");
                 break;
 
             case UIState.Success_WithData:
+                if (logoScreen != null) logoScreen.SetActive(true);
+                if (loadingSpinner != null) loadingSpinner.SetActive(false);
                 StatusMessageGroup.SetActive(true);
                 if (buttonSlot != null) buttonSlot.SetActive(true); //Shows the buttons
                 RoadInsetGroup.SetActive(true);
@@ -273,6 +283,8 @@ public class MainUIFlowController : MonoBehaviour
                 break;
 
             case UIState.Success_NoData:
+                if (logoScreen != null) logoScreen.SetActive(true);
+                if (loadingSpinner != null) loadingSpinner.SetActive(false);
                 StatusMessageGroup.SetActive(true);
                 if (buttonSlot != null) buttonSlot.SetActive(false); //Hides the buttons to panel scales correctly
                 reportIssueButton.SetActive(true);
@@ -280,16 +292,21 @@ public class MainUIFlowController : MonoBehaviour
                 break;
 
             case UIState.CaptureImage:
+                if (loadingSpinner != null) loadingSpinner.SetActive(false);
                 reportIssuePanel.SetActive(true); //Show the main panel housing the report flow elements
                 SetReportFlowState(ReportFlowState.LiveCapture); //Set the sub-state for the report flow to live capture, which will show the relevant UI elements for that phase
                 break;
 
             case UIState.LocationResolutionFailed:
+                if (logoScreen != null) logoScreen.SetActive(true);
+                if (loadingSpinner != null) loadingSpinner.SetActive(false);
                 ConfigureLocationResolutionFailedUI(); //Single failure state with UI configured from accuracy class and retry count
                 break;
 
             case UIState.Error:
+                if (loadingSpinner != null) loadingSpinner.SetActive(false);
                 StatusMessageGroup.SetActive(true);
+                if (buttonSlot != null) buttonSlot.SetActive(true);
                 retryButton.SetActive(true);
                 SetStatusMessage("An error occurred. Please try again.");
                 break;
@@ -336,7 +353,7 @@ public class MainUIFlowController : MonoBehaviour
                 ShowButton(analyseButton, interactable: false);
                 ShowButton(retakeButton, interactable: true);
 
-                SetImageCaptureInstructionText("Review the captured image. Tap Analyse to submit for analysis or Retake to try again.");
+                SetImageCaptureInstructionText("Review the captured image. Select matching issue type from drop down menu. Press analyse to submit or retake to try again.");
                 sharedCameraManager?.SuspendFeed();
                 break;
 
@@ -884,6 +901,17 @@ public class MainUIFlowController : MonoBehaviour
     //Fired by GoogleMapsServices script when we get the road name back from the API, this is where we determine if we go to the Success_WithData or Success_NoData state based on if we have JSON data for that road name or not
     private void OnRoadNameReceived(string roadName)
     {
+        bool cameFromUnnamedRoadFallback = googleMapsServices != null && googleMapsServices.UsedUnnamedRoadFallback;
+        if (cameFromUnnamedRoadFallback)
+        {
+            string fallbackArea = googleMapsServices.UnnamedRoadFallbackAreaName;
+            locationResolutionNearestKnownAreaName = string.IsNullOrEmpty(fallbackArea) ? null : fallbackArea.Trim();
+        }
+        else
+        {
+            locationResolutionNearestKnownAreaName = null;
+        }
+
         if (roadName == "ERROR_NETWORK")
         {
             SetState(UIState.Error); //If we get network error from the API call, we want to show that in the messaging
@@ -891,7 +919,7 @@ public class MainUIFlowController : MonoBehaviour
             return;
         }
 
-        if (roadName == "ERROR_NO_DATA" || string.IsNullOrEmpty(roadName)  || string.Equals(roadName.Trim(), "Unnamed Road", System.StringComparison.OrdinalIgnoreCase))
+        if (roadName == "ERROR_NO_DATA" || string.IsNullOrEmpty(roadName)  || string.Equals(roadName.Trim(), "Unnamed Road", System.StringComparison.OrdinalIgnoreCase) || cameFromUnnamedRoadFallback)
         {
             float horizontalAccuracy = locationServiceManager != null
                 ? locationServiceManager.LastLocationSnapshot.horizontalAccuracy
@@ -997,10 +1025,35 @@ public class MainUIFlowController : MonoBehaviour
 
     //ResetVisualState - Calls all reset helpers to ensure clean slate before setting new state
 
+    private void RebuildIdleCardLayout()
+    {
+        Canvas.ForceUpdateCanvases();
+
+        if (PanelActionCardPrefab != null)
+        {
+            RectTransform cardRect = PanelActionCardPrefab.GetComponent<RectTransform>();
+            if (cardRect != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(cardRect);
+            }
+        }
+
+        if (buttonSlot != null)
+        {
+            RectTransform slotRect = buttonSlot.GetComponent<RectTransform>();
+            if (slotRect != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(slotRect);
+            }
+        }
+    }
+
     private void ResetVisualState()
     {
+        HideAllPanels();
         ResetMainCardGroups();
-        ResetButtons();
+        HideAllButtons();
+        HideReportSubPanels();
         if (reportIssuePanel != null) reportIssuePanel.SetActive(false);
         if (projectCardPrefab != null) projectCardPrefab.SetActive(false);
     }
@@ -1076,7 +1129,14 @@ public class MainUIFlowController : MonoBehaviour
         switch (currentLocationFailureType)
         {
             case LocationFailureType.GoodAccuracyUnknownRoad:
-                SetStatusMessage("Unable to identify road name. Report issue for nearest known area.");
+                if (string.IsNullOrEmpty(locationResolutionNearestKnownAreaName))
+                {
+                    SetStatusMessage("Unable to identify road name. Report issue for nearest known area.");
+                }
+                else
+                {
+                    SetStatusMessage($"Unable to identify road name. Report issue for nearest known area: {locationResolutionNearestKnownAreaName}.");
+                }
                 reportIssueButton.SetActive(true);
                 break;
 
@@ -1087,7 +1147,14 @@ public class MainUIFlowController : MonoBehaviour
                 }
                 else
                 {
-                    SetStatusMessage("Unable to identify road name. You may continue reporting using the nearest known area.");
+                    if (string.IsNullOrEmpty(locationResolutionNearestKnownAreaName))
+                    {
+                        SetStatusMessage("Unable to identify road name. You may continue reporting using the nearest known area.");
+                    }
+                    else
+                    {
+                        SetStatusMessage($"Unable to identify road name. You may continue reporting using the nearest known area: {locationResolutionNearestKnownAreaName}.");
+                    }
                     if (buttonSlot != null) buttonSlot.SetActive(false); //Hide the retry button after the first retry attempt to encourage user to continue with reporting even if we don't have a road name, since we know from testing that many locations will not resolve but can still be reported on successfully, and we don't want users to get stuck in a loop of retrying without success. This also simplifies the UI after the first retry by removing the option that is unlikely to succeed, and focuses user on moving forward with reporting.
                     reportIssueButton.SetActive(true);
                 }
