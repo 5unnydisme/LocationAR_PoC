@@ -73,9 +73,42 @@
       "projectIds": ["proj_014"]
     },
     {
-      "roadName": "Sixth Avenue",
-      "projectIds": ["proj_015"]
+      "roadName": "Dayal Road",
+      "projectIds": ["proj_015", "proj_016"]
+    },
+    {
+      "roadName": "Purana Kanpur",
+      "projectIds": ["proj_017"]
+    },
+    {
+      "roadName": "Mall Road",
+      "projectIds": ["proj_018", "proj_019"]
+    },
+    {
+      "roadName": "Mata Swarooprani Road",
+      "projectIds": ["proj_020"]
+    },
+    {
+      "roadName": "Bhairav Mandir Road",
+      "projectIds": ["proj_021"]
+    },
+    {
+      "roadName": "Empire Lane",
+      "projectIds": ["proj_022"]
+    },
+    {
+      "roadName": "Nala Road",
+      "projectIds": ["proj_023"]
+    },
+    {
+      "roadName": "Hastings Avenue",
+      "projectIds": ["proj_024"]
+    },
+    {
+      "roadName": "Fourth Avenue",
+      "projectIds": ["proj_025"]
     }
+  
   ],
   "projects": [
     {
@@ -136,7 +169,7 @@
       "endDate": "30/03/2015",
       "length": "N/A",
       "contractor": "M/s Varad Enterprises",
-      "stretchDescription": "From Sarsaiya Ghat to Bara Crossing via Meston Road and Latouche Road upto Bans Mandi"
+      "stretchDescription": "From Sarsaiya Ghat to Bara Crossing, via Meston Road and Latouche Road up to Bans Mandi"
     },
     {
       "projectId": "proj_007",
@@ -166,7 +199,7 @@
       "endDate": "N/A",
       "length": "N/A",
       "contractor": "The Shelter",
-      "stretchDescription": "From Vijay Nagar crossing to NH-2 Bypass"
+      "stretchDescription": "From Vijay Nagar Crossing to NH-2 Bypass"
     },
     {
       "projectId": "proj_010",
@@ -186,7 +219,7 @@
       "endDate": "N/A",
       "length": "N/A",
       "contractor": "Sri Tirupati Cons.",
-      "stretchDescription": "zone-2 ward-11,Sainik park to Bibipur crossing Road"
+      "stretchDescription": "Zone -2 Ward 11, Sainik Park to Bibipur Crossing Road"
     },
     {
       "projectId": "proj_012",
@@ -196,7 +229,7 @@
       "endDate": "N/A",
       "length": "N/A",
       "contractor": "M/s Maa Sarda interprises",
-      "stretchDescription": "Zone-2 Ward -24 G.T road to manoj hotel to Children park"
+      "stretchDescription": "Zone -2 Ward 24, G.T Road to Manoj Hotel to Children Park"
     },
     {
       "projectId": "proj_013",
@@ -206,7 +239,7 @@
       "endDate": "N/A",
       "length": "N/A",
       "contractor": "M/s Ganesh and company",
-      "stretchDescription": "Zone -2 Ward-24,G.T road to saint marry school"
+      "stretchDescription": "Zone -2 Ward 24, G.T Road to Saint Marry School"
     },
     {
       "projectId": "proj_014",
@@ -216,18 +249,119 @@
       "endDate": "N/A",
       "length": "N/A",
       "contractor": "M/s Maa Sarda interprises",
-      "stretchDescription": "Zone-2 ward-26 gandhi gram to Babita paswan"
+      "stretchDescription": "Zone -2 Ward 26, Gandhi Gram to Babita Paswan"
+    },
+    {
+      "projectId": "proj_015",
+      "workType": "Road Improvement Work by Hot Mix Plant and Waste Plastic",
+      "budget": "67.9",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "0.665",
+      "contractor": "M/s Arpita Associates",
+      "stretchDescription": "Zone -4 Ward 15, From Commissioner Chauraha to Chandni Nursing Home"
+    },
+    {
+      "projectId": "proj_016",
+      "workType": "Road Improvement Work by Hot Mix Plant and Waste Plastic",
+      "budget": "92.15",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "0.75",
+      "contractor": "M/s R.R Enterprises",
+      "stretchDescription": "Zone -4 Ward 15, From Arya Nagar Chauraha to Banga Bhawan"
+    },
+    {
+      "projectId": "proj_017",
+      "workType": "Road Improvement Work by Hot Mix Plant and Waste Plastic",
+      "budget": "92.15",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "0.55",
+      "contractor": "M/s Shriram Infrastructure",
+      "stretchDescription": "Zone -4 Ward 75, From Bhairav Ghat Chauraha to Bhairav Ghat Mandir and Magazine Ghat"
+    },
+    {
+      "projectId": "proj_018",
+      "workType": "Road Improvement Work by Hot Mix Plant and Waste Plastic",
+      "budget": "38.8",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "0.6",
+      "contractor": "M/s Gayatri Stone",
+      "stretchDescription": "Zone -4 Ward 3, From Lal Imli Chauraha to Lakadmandi Kudagar"
+    },
+    {
+      "projectId": "proj_019",
+      "workType": "Road Improvement Work by Hot Mix Plant",
+      "budget": "19.4",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "0.35",
+      "contractor": "M/s Rajveer Enterprises",
+      "stretchDescription": "Zone -4 Ward 43, From Apollo Hospital to Lal Imli Road"
+    },
+    {
+      "projectId": "proj_020",
+      "workType": "Road Improvement Work by Hot Mix Plant and Waste Plastic",
+      "budget": "31.23",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "0.33",
+      "contractor": "M/s Rajveer Enterprises",
+      "stretchDescription": "Zone -4 Ward 61, From Heritage Home, Swaroop Nagar 7/120 to 7/156 E-Block, Swaroop Nagar"
+    },
+    {
+      "projectId": "proj_021",
+      "workType": "Sidewalk Improvement Work by RMC Plant/CC White Topping",
+      "budget": "74.69",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "0.511",
+      "contractor": "M/s Kaila Devi Construction",
+      "stretchDescription": "Zone -4 Ward 4, From Bhairav Ghat Chauraha to Allen House Mod, via Jamuna Peda Road"
+    },
+    {
+      "projectId": "proj_022",
+      "workType": "Sidewalk Improvement Work by RMC Plant/CC White Topping",
+      "budget": "73.31",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "0.801",
+      "contractor": "M/s Shriram Infrastructure",
+      "stretchDescription": "Zone -4 Ward 42, From Huddard School to Parade Chauraha, via Lal Imli"
+    },
+    {
+      "projectId": "proj_023",
+      "workType": "N/A",
+      "budget": "350",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "2.55",
+      "contractor": "M/s Shriram Infrastructure",
+      "stretchDescription": "Zone -4 Ward 15, From Seesamau Nala, Bakarmandi"
+    },
+    {
+      "projectId": "proj_024",
+      "workType": "N/A",
+      "budget": "26.55",
+      "startDate": "N/A",
+      "endDate": "N/A",
+      "length": "0.246",
+      "contractor": "M/s Agnihotri Builders",
+      "stretchDescription": "Zone -4 Ward 13, From Purana Kanpur to Machali Mandi"
     },
 
-{
-      "projectId": "proj_015",
-      "workType": "Road Improvent Work by Hot Mix Plant and Waste Plastic",
-      "budget": "6.79 CR",
-      "startDate": "21/11/2020",
-      "endDate": "11/03/2024",
-      "length": "545m",
-      "contractor": "M/s Test Long Contractor Name",
-      "stretchDescription": "Long test description for testing purpose only, from test crossing to test crossing"
+    {
+      "projectId": "proj_025",
+      "workType": "Sidewalk Improvement Work by RMC Plant/CC White Topping",
+      "budget": "26.55",
+      "startDate": "12-06-2024",
+      "endDate": "12-12-2025",
+      "length": "0.246",
+      "contractor": "M/s Long Test Contractor Name",
+      "stretchDescription": "Long test road description for the stretch where work was done"
     }
+
   ]
 }
