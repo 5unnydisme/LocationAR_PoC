@@ -74,11 +74,14 @@ public class MainUIFlowController : MonoBehaviour
     [SerializeField] private GameObject roadHeaderPanel;
     [SerializeField] private GameObject confirmationPanel; //Panel that says Are you sure after second round of analysis.
 
+
     // [Tooltip("The parent panel that contains UI elements for image capture")]
     // [SerializeField] private GameObject imageCapturePanel;
 
     [Tooltip("The button slot group that needs to be hidden during certain states")]
     [SerializeField] private GameObject buttonSlot; //Parent object containing all buttons
+    [Tooltip ("The Yes/No button slot for confirmation panel")]
+    [SerializeField] private GameObject confirmationButtonSlot; //Parent object containing the Yes/No buttons
 
     [Header("Text Elements")]
     [Tooltip("TMP text that shows the helper text to the user based on state")]
@@ -88,6 +91,7 @@ public class MainUIFlowController : MonoBehaviour
     [Header("Road Inset Text Elements")]
     [SerializeField] private TextMeshProUGUI insetRoadHeaderText;
     [SerializeField] private TextMeshProUGUI insetProjectCountText;
+    [SerializeField] private TextMeshProUGUI confirmationMessageText;
 
     [Header("Road Header Text Elements")]
     [SerializeField] private TextMeshProUGUI roadHeaderText;
@@ -174,7 +178,15 @@ public class MainUIFlowController : MonoBehaviour
     private int locationRetryCount = 0; //Increments only when retry is pressed from LocationResolutionFailed
     private LocationFailureType currentLocationFailureType = LocationFailureType.GoodAccuracyUnknownRoad;
     private string locationResolutionNearestKnownAreaName = null;
-    private int notDetectedCount = 0; //counts how many times the CV analysis has returned not detected for an issue type
+    private const string OverridePromptMessage=
+        "AI analysis can make mistakes. Are you sure the image matches the selected issue type?";
+    private const string OverrideNoMessage=
+        "Press back to reselect matching issue type.";
+    private const string OverrideYesMessage=
+        "Override confirmed. Press Submit to file the grievance report.";
+
+    private bool userConfirmedOverride = false; //Tracks whether the user has confirmed the override after multiple not detected results, this allows them to submit a grievance report even if the CV is not detecting the issue, in cases where they are confident the issue type matches and want to file a report anyway.
+    private int notDetectedCount = 0; //Tracks unresolved not-detected prompts; Back stays locked while this is greater than 0.
     #endregion
 
     #region Unity Lifecycle Methods
@@ -353,7 +365,7 @@ public class MainUIFlowController : MonoBehaviour
                 ShowButton(analyseButton, interactable: false);
                 ShowButton(retakeButton, interactable: true);
 
-                SetImageCaptureInstructionText("Review the captured image. Select matching issue type from drop down menu. Press analyse to submit or retake to try again.");
+                SetImageCaptureInstructionText("Select matching issue type from dropdown menu. Press analyse to submit or retake to try again.");
                 sharedCameraManager?.SuspendFeed();
                 break;
 
@@ -379,38 +391,34 @@ public class MainUIFlowController : MonoBehaviour
                 previewRawImage.gameObject.SetActive(true); //Show the preview of the captured image to the user for review
                 //instructionpanel.SetActive(true); //Keep instructions visible to let user know we are working on analysing the image
                 //This is where we will show the results from the CV analysis
-               
-               bool canSubmit = currentCVResult != null && currentCVResult.detected;
-               if (canSubmit)
-                {
-                    notDetectedCount = 0; //Resets on a pass where issue is detected
-                }
 
+                bool isDetected = currentCVResult != null && currentCVResult.detected; 
+                bool canSubmit = isDetected  || userConfirmedOverride; 
+
+                if (isDetected)
+                {
+                    notDetectedCount = 0;
+                    SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint.");
+                    ConfigureConfirmationPanel(false, string.Empty, showButtons: false, buttonsInteractable: false); //check if this hides the button slot for spacing
+                }
+                else if (userConfirmedOverride)
+                {
+                    notDetectedCount = 0;
+                    SetImageCaptureInstructionText("Analysis complete. Issue type not detected.");
+                    ConfigureConfirmationPanel(true, OverrideYesMessage, showButtons: false, buttonsInteractable: false);
+                    ShowButton(backToPreviewButton, interactable: true);
+                }
                 else
                 {
                     notDetectedCount++;
+                    SetImageCaptureInstructionText("Analysis complete. Issue type not detected");
+                    ConfigureConfirmationPanel(true, OverridePromptMessage, showButtons: true, buttonsInteractable: true);
+                    ShowButton(backToPreviewButton, interactable: false);
                 }
 
-                bool isSecondNotDetected = !canSubmit && notDetectedCount >=2;
-                if (canSubmit)
-                {
-                    SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint");
-                }
-                else if (notDetectedCount ==1)
-                {
-                    SetImageCaptureInstructionText("Issue type not detected. Make sure issue type matches the submitted image.");
-                }
-                else
-                {
-                    SetImageCaptureInstructionText ("Issue type still not detected, press submit to file a grievance report anyway.");
-                }
-
-                if (reviewResultsPanel != null && !reviewResultsPanel.activeSelf) reviewResultsPanel.SetActive(true); //Keep active if already visible to avoid unnecessary relayout churn.
-                //ShowButton(retakeButton, interactable: true);
-                ShowButton(submitGrievanceButton, interactable: canSubmit || isSecondNotDetected);
-                if (backToPreviewButton != null) backToPreviewButton.SetActive(!canSubmit);
-                if (confirmationPanel != null) confirmationPanel.SetActive(isSecondNotDetected);
-                break;
+                if(reviewResultsPanel != null && !reviewResultsPanel.activeSelf) reviewResultsPanel.SetActive(true);
+                ShowButton(submitGrievanceButton, interactable: canSubmit); 
+                break; 
 
             case ReportFlowState.SubmittingGrievance:
                 sharedCameraManager?.SuspendFeed();
@@ -430,6 +438,7 @@ public class MainUIFlowController : MonoBehaviour
                 if (PanelActionCardPrefab != null) PanelActionCardPrefab.SetActive(true);
                 StatusMessageGroup.SetActive(true);
                 SetStatusMessage("Press main menu to return to main page.");
+                if (retryButton != null) retryButton.SetActive(false); //Ensures that retry button not visible here
                 //if (successSubmissionPanel != null) successSubmissionPanel.SetActive(true);
                 ShowButton(mainMenuButton, interactable: true); //Show the back button to let user return to main page after seeing success message
                 break;
@@ -590,7 +599,7 @@ public class MainUIFlowController : MonoBehaviour
         currentCVResult = null; //Discard any previously stored result so stale data cannot be submitted
         cvResultPopulator?.Clear();
         modelDropdownController?.ResetSelection();
-        notDetectedCount = 0; //Reset the not detected count when user clicks a new picture for analysis
+        ResetOverrideConfirmation();
         SetReportFlowState(ReportFlowState.LiveCapture); //Go back to the live capture state to let user try taking the picture again
     }
 
@@ -656,6 +665,7 @@ public class MainUIFlowController : MonoBehaviour
                     }
                 }
 
+                ResetOverrideConfirmation();
                 currentCVResult = result;
                 if (!string.IsNullOrEmpty(modelDisplayName))
                 {
@@ -667,6 +677,8 @@ public class MainUIFlowController : MonoBehaviour
                 }
 
                 SetReportFlowState(ReportFlowState.ReviewResult);
+                Texture2D mockCapturedTexture = previewRawImage != null ? previewRawImage.texture as Texture2D : null;
+                cvResultPopulator.SetCapturedFrame(image);
                 cvResultPopulator.Populate(result, roadName);
             },
 
@@ -769,7 +781,7 @@ public class MainUIFlowController : MonoBehaviour
             }
             currentCVResult = null; //discard any stored CV result since we are going back and not submitting, this prevents stale data from being submitted if user goes back but then later decides to submit without retaking the picture
             cvResultPopulator?.Clear();
-            notDetectedCount = 0; //Reset the not detected count on return to main menu
+            ResetOverrideConfirmation();
             modelDropdownController?.ResetSelection();
             ResetLocationRetryCount(); //Reset when user returns to Main Menu
             SetState(UIState.Idle);
@@ -777,9 +789,15 @@ public class MainUIFlowController : MonoBehaviour
 
         public void OnBackToPreviewButtonPressed()
         {
+            if (notDetectedCount > 0)
+            {
+                debugOverlayController?.ShowReportFlowState("[PanelManager] Back blocked — choose Yes/No first.");
+                return;
+            }
+
             modelDropdownController?.ResetSelection();
             SetReportFlowState(ReportFlowState.Preview);
-            debugOverlayController?.ShowReportFlowState("[PanelManager] Back to Preview — notDetectedCount=" + notDetectedCount);
+            debugOverlayController?.ShowReportFlowState("[PanelManager] Back to Preview — overrideConfirmed=" + userConfirmedOverride);
         }
 
     //Dummy method after Awaiting Analysis timer is hit,replace with real CV response handling once SB's API is live
@@ -792,6 +810,7 @@ public class MainUIFlowController : MonoBehaviour
             }
 
             CVAnalysisResult fakeResult = BuildMockCVResult();
+            ResetOverrideConfirmation();
             currentCVResult = fakeResult; //Store the fake result so it cane be it can be submitted if user taps submit without retaking
 
             string selectedIssueTypeDisplay = modelDropdownController != null ? modelDropdownController.SelectedModelDisplayName : string.Empty;
@@ -802,7 +821,10 @@ public class MainUIFlowController : MonoBehaviour
 
             // Activate ReviewResult first so first-time layout measures on an active hierarchy.
             SetReportFlowState(ReportFlowState.ReviewResult);
+            Texture2D mockCapturedTexture = previewRawImage != null ? previewRawImage.texture as Texture2D : null;
+            cvResultPopulator.SetCapturedFrame(mockCapturedTexture);
             cvResultPopulator.Populate(fakeResult, string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName);
+        
         }
 
         private CVAnalysisResult BuildMockCVResult()
@@ -815,6 +837,28 @@ public class MainUIFlowController : MonoBehaviour
                 //confidence = 0.92f,
                 //message = "Large pothole detected, needs immediate attention for repair."
             };
+        }
+
+        public void OnConfirmationYesButtonPressed()
+        {
+            userConfirmedOverride = true; 
+            notDetectedCount = 0;
+            ConfigureConfirmationPanel(true, OverrideYesMessage, showButtons: false, buttonsInteractable: false);
+
+            //SetImageCaptureInstructionText("Analysis complete.");
+            ShowButton(submitGrievanceButton, interactable: true);
+            ShowButton(backToPreviewButton, interactable: true);
+        }
+
+        public void OnConfirmationNoButtonPressed()
+        {
+            userConfirmedOverride = false; 
+            notDetectedCount = 0;
+            ConfigureConfirmationPanel(true, OverrideNoMessage, showButtons: false, buttonsInteractable: false);
+
+            //SetImageCaptureInstructionText("Analysis complete."); 
+            ShowButton(submitGrievanceButton, interactable: false); 
+            ShowButton(backToPreviewButton, interactable: true);
         }
 
 
@@ -1023,6 +1067,41 @@ public class MainUIFlowController : MonoBehaviour
         }
     }
 
+    private void ResetOverrideConfirmation()
+    {
+        userConfirmedOverride = false;
+        notDetectedCount = 0;
+        ConfigureConfirmationPanel(false, string.Empty, showButtons: true, buttonsInteractable: true);
+    }
+
+    private void ConfigureConfirmationPanel(bool isVisible, string message, bool showButtons, bool buttonsInteractable)
+    {
+         if (confirmationPanel != null) confirmationPanel.SetActive(isVisible); 
+         if (!isVisible) return;
+
+         if(confirmationMessageText !=null)
+        {
+            confirmationMessageText.text = message;
+        }
+
+        if(confirmationButtonSlot != null)
+        {
+            confirmationButtonSlot.SetActive(showButtons);
+        }
+        SetConfirmationButtonsInteractable(showButtons && buttonsInteractable);
+    }
+
+    private void SetConfirmationButtonsInteractable (bool interactable)
+    {
+        if (confirmationButtonSlot == null) return; 
+
+        Button[] buttons = confirmationButtonSlot.GetComponentsInChildren<Button>(true);
+        for (int i=0; i < buttons.Length; i++)
+        {
+            buttons[i].interactable = interactable;
+        }
+    }
+
     //ResetVisualState - Calls all reset helpers to ensure clean slate before setting new state
 
     private void RebuildIdleCardLayout()
@@ -1131,13 +1210,13 @@ public class MainUIFlowController : MonoBehaviour
             case LocationFailureType.GoodAccuracyUnknownRoad:
                 if (string.IsNullOrEmpty(locationResolutionNearestKnownAreaName))
                 {
-                    SetStatusMessage("Unable to identify road name. Report issue for nearest known area.");
+                    SetStatusMessage("Unable to identify road name. Proceed to report issue for nearest known area.");
                 }
                 else
                 {
-                    SetStatusMessage($"Unable to identify road name. Report issue for nearest known area: {locationResolutionNearestKnownAreaName}.");
+                    SetStatusMessage($"Unable to identify road name. Proceed to report issue for nearest known area: {locationResolutionNearestKnownAreaName}.");
                 }
-                reportIssueButton.SetActive(true);
+                //reportIssueButton.SetActive(true);
                 break;
 
             case LocationFailureType.ModerateAccuracyUnknownRoad:

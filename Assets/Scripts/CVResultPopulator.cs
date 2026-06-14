@@ -32,6 +32,9 @@ public class CVResultPopulator : MonoBehaviour
     [Tooltip("Icon shown on the left of the card.")]
     [SerializeField] private Image iconImage;
 
+    [Tooltip("Captured snapshot inside the review results card.")]
+    [SerializeField] private RawImage capturedFrameImage;
+
     [Header("CV Result Card Header Labels")]
     [Tooltip("Displayed text for issue type header label.")]
     [SerializeField] private string issueTypeHeaderLabel = "Issue Type";
@@ -41,10 +44,15 @@ public class CVResultPopulator : MonoBehaviour
 
     [Tooltip("Optional icon used when SetIcon receives null.")]
     [SerializeField] private Sprite fallbackIcon;
+
+    [Header("Capture Frame")]
+    [Tooltip("Shared camera manager used to apply cached capture rotatino/scaling.")]
+    [SerializeField] private SharedCameraManager sharedCameraManager; 
     #endregion
 
     #region Private State
     private string cachedRoadName = string.Empty;
+    private Texture2D pendingCapturedFrame;
     #endregion
 
     #region Public API
@@ -52,6 +60,11 @@ public class CVResultPopulator : MonoBehaviour
     public void SetRoadName(string roadName)
     {
         cachedRoadName = Sanitize(roadName);
+    }
+
+    public void SetCapturedFrame (Texture2D texture)
+    {
+        pendingCapturedFrame = texture;
     }
 
     // Backward-compatible call site: existing callbacks can keep calling Populate(data).
@@ -88,6 +101,14 @@ public class CVResultPopulator : MonoBehaviour
         SetText(grievanceLineText, grievanceLineValue);
 
         ForceLayoutRefresh();
+        if (capturedFrameImage != null)
+        {
+            capturedFrameImage.texture = pendingCapturedFrame;
+            if (pendingCapturedFrame != null)
+            {
+                sharedCameraManager?.ApplyCaptureRotationTo(capturedFrameImage);
+            }
+        }
     }
 
     // Optional runtime icon swap if you decide to drive icon per defect type later.
@@ -115,6 +136,13 @@ public class CVResultPopulator : MonoBehaviour
         {
             iconImage.sprite = fallbackIcon;
         }
+
+        if (capturedFrameImage != null)
+        {
+            capturedFrameImage.texture = null;
+        }
+
+        pendingCapturedFrame = null;
     }
     #endregion
 
