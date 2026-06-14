@@ -186,7 +186,7 @@ public class MainUIFlowController : MonoBehaviour
         "Override confirmed. Press Submit to file the grievance report.";
 
     private bool userConfirmedOverride = false; //Tracks whether the user has confirmed the override after multiple not detected results, this allows them to submit a grievance report even if the CV is not detecting the issue, in cases where they are confident the issue type matches and want to file a report anyway.
-    private int notDetectedCount = 0; //Tracks unresolved not-detected prompts; Back stays locked while this is greater than 0.
+    //private int notDetectedCount = 0; //Tracks unresolved not-detected prompts; Back stays locked while this is greater than 0.
     #endregion
 
     #region Unity Lifecycle Methods
@@ -353,7 +353,7 @@ public class MainUIFlowController : MonoBehaviour
                 sharedCameraManager?.ResumeFeed();
                 ShowButton(captureButton, interactable: true); //Show the capture button and allow interaction
                 captureSquare.SetActive(true); //Show the capture square to guide users on how to frame the image
-                SetImageCaptureInstructionText("Position defect within dotted square and tap on capture when ready."); //Set instructions for image capture
+                SetImageCaptureInstructionText("Position issue within dotted square and tap on capture to click picture."); //Set instructions for image capture
                 break;
 
             case ReportFlowState.Preview:
@@ -365,7 +365,7 @@ public class MainUIFlowController : MonoBehaviour
                 ShowButton(analyseButton, interactable: false);
                 ShowButton(retakeButton, interactable: true);
 
-                SetImageCaptureInstructionText("Select matching issue type from dropdown menu. Press analyse to submit or retake to try again.");
+                SetImageCaptureInstructionText("Select issue type from menu. Press analyse to submit or retake to try again.");
                 sharedCameraManager?.SuspendFeed();
                 break;
 
@@ -397,20 +397,20 @@ public class MainUIFlowController : MonoBehaviour
 
                 if (isDetected)
                 {
-                    notDetectedCount = 0;
+                    //notDetectedCount = 0;
                     SetImageCaptureInstructionText("Analysis complete. Press submit to lodge complaint.");
                     ConfigureConfirmationPanel(false, string.Empty, showButtons: false, buttonsInteractable: false); //check if this hides the button slot for spacing
                 }
                 else if (userConfirmedOverride)
                 {
-                    notDetectedCount = 0;
+                    //notDetectedCount = 0;
                     SetImageCaptureInstructionText("Analysis complete. Issue type not detected.");
                     ConfigureConfirmationPanel(true, OverrideYesMessage, showButtons: false, buttonsInteractable: false);
                     ShowButton(backToPreviewButton, interactable: true);
                 }
                 else
                 {
-                    notDetectedCount++;
+                    //notDetectedCount++;
                     SetImageCaptureInstructionText("Analysis complete. Issue type not detected");
                     ConfigureConfirmationPanel(true, OverridePromptMessage, showButtons: true, buttonsInteractable: true);
                     ShowButton(backToPreviewButton, interactable: false);
@@ -789,11 +789,11 @@ public class MainUIFlowController : MonoBehaviour
 
         public void OnBackToPreviewButtonPressed()
         {
-            if (notDetectedCount > 0)
-            {
-                debugOverlayController?.ShowReportFlowState("[PanelManager] Back blocked — choose Yes/No first.");
-                return;
-            }
+            // if (notDetectedCount > 0)
+            // {
+            //     debugOverlayController?.ShowReportFlowState("[PanelManager] Back blocked — choose Yes/No first.");
+            //     return;
+            // }
 
             modelDropdownController?.ResetSelection();
             SetReportFlowState(ReportFlowState.Preview);
@@ -842,18 +842,18 @@ public class MainUIFlowController : MonoBehaviour
         public void OnConfirmationYesButtonPressed()
         {
             userConfirmedOverride = true; 
-            notDetectedCount = 0;
+            //notDetectedCount = 0;
             ConfigureConfirmationPanel(true, OverrideYesMessage, showButtons: false, buttonsInteractable: false);
 
             //SetImageCaptureInstructionText("Analysis complete.");
             ShowButton(submitGrievanceButton, interactable: true);
-            ShowButton(backToPreviewButton, interactable: true);
+            ShowButton(backToPreviewButton, interactable: false);
         }
 
         public void OnConfirmationNoButtonPressed()
         {
             userConfirmedOverride = false; 
-            notDetectedCount = 0;
+            //notDetectedCount = 0;
             ConfigureConfirmationPanel(true, OverrideNoMessage, showButtons: false, buttonsInteractable: false);
 
             //SetImageCaptureInstructionText("Analysis complete."); 
@@ -1070,7 +1070,7 @@ public class MainUIFlowController : MonoBehaviour
     private void ResetOverrideConfirmation()
     {
         userConfirmedOverride = false;
-        notDetectedCount = 0;
+        //notDetectedCount = 0;
         ConfigureConfirmationPanel(false, string.Empty, showButtons: true, buttonsInteractable: true);
     }
 

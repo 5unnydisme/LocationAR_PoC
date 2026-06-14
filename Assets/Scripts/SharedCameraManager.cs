@@ -380,8 +380,6 @@ public class SharedCameraManager : MonoBehaviour
         if (aspectFitter != null)
             aspectFitter.enabled = false;
 
-        // When rotated 90° or 270°, the landscape frame is displayed portrait.
-        // We swap the RawImage rect dimensions so it fills the screen correctly after rotation.
         bool isPortraitRotation = (rotation == 90f || rotation == 270f);
 
         // Use parent canvas-space size, not Screen pixels, to avoid zoom/crop when CanvasScaler is active.
@@ -389,8 +387,18 @@ public class SharedCameraManager : MonoBehaviour
         float canvasWidth = parentRect != null ? parentRect.rect.width : Screen.width;
         float canvasHeight = parentRect != null ? parentRect.rect.height : Screen.height;
 
-        float rectWidth  = isPortraitRotation ? canvasHeight : canvasWidth;
-        float rectHeight = isPortraitRotation ? canvasWidth  : canvasHeight;
+        float texWidth = webCamTexture.width;
+        float texHeight = webCamTexture.height;
+        if (texWidth <= 0f || texHeight <= 0f)
+        {
+            return;
+        }
+
+        // Match preview fit logic: preserve camera aspect and scale to cover the container.
+        float scale = Mathf.Max(
+            isPortraitRotation ? canvasWidth / texHeight : canvasWidth / texWidth,
+            isPortraitRotation ? canvasHeight / texWidth : canvasHeight / texHeight
+        );
 
         // RectTransform controls 2D layout of a UI element.
         // sizeDelta sets width/height only when anchors are center/center (not stretch).
@@ -398,13 +406,13 @@ public class SharedCameraManager : MonoBehaviour
         previewRawImage.rectTransform.anchorMin        = new Vector2(0.5f, 0.5f);
         previewRawImage.rectTransform.anchorMax        = new Vector2(0.5f, 0.5f);
         previewRawImage.rectTransform.anchoredPosition = Vector2.zero;
-        previewRawImage.rectTransform.sizeDelta        = new Vector2(rectWidth, rectHeight);
+        previewRawImage.rectTransform.sizeDelta        = new Vector2(texWidth * scale, texHeight * scale);
 
         cachedRotation = webCamTexture.videoRotationAngle;
         cachedVerticallyMirrored = webCamTexture.videoVerticallyMirrored;
         cachedTexWidth = webCamTexture.width;   
         cachedTexHeight = webCamTexture.height; 
-        Log($"Rotation: {rotation}° | Rect set to: {rectWidth} x {rectHeight}");
+        Log($"Rotation: {rotation} | Live preview scaled with preserved aspect.");
     }
 
     public void ApplyCaptureRotationTo(RawImage target)
