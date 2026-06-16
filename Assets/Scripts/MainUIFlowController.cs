@@ -1180,7 +1180,7 @@ public class MainUIFlowController : MonoBehaviour
         }
 
         // Moderate bucket: 20m to <75m.
-        if (horizontalAccuracy < 125f)
+        if (horizontalAccuracy < 75f)
         {
             return LocationFailureType.ModerateAccuracyUnknownRoad;
         }

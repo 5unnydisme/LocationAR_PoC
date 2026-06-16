@@ -13723,7 +13723,7 @@ MonoBehaviour:
   projectCardScrollPanel: {fileID: 2111968320}
   projectCardContentContainer: {fileID: 1199834416}
   projectCardPrefab: {fileID: 1856004926867347861, guid: 81f9b2e0f3f374aacafec97cdf788ba3, type: 3}
-  testMode: 1
+  testMode: 0
   reportIssuePanel: {fileID: 2086905502}
   imageCaptureInstructionPanel: {fileID: 662609331}
   imageCaptureInstructionText: {fileID: 662609330}
