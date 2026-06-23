@@ -545,6 +545,16 @@ public class DebugOverlayController : MonoBehaviour
         isDebugPanelVisible = !isDebugPanelVisible;
         SetDebugPanelVisibility(isDebugPanelVisible);
     }
+
+    public bool IsDebugPanelVisible()
+    {
+        return debugPanel != null && debugPanel.activeSelf;
+    }
+
+    public void SetDebugPanelVisible(bool isVisible)
+    {
+        SetDebugPanelVisibility(isVisible);
+    }
     
     
       /// <summary>

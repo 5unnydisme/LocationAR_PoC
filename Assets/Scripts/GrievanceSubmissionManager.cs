@@ -53,6 +53,7 @@ public class GrievanceSubmissionManager : MonoBehaviour
         CVAnalysisResult cvResult,
         LocationServiceManager.LocationSnapshot snapshot,
         string roadName,
+        string formattedAddress,
         System.Action<string> onSuccess,
         System.Action<string> onFailure)
 
@@ -63,7 +64,7 @@ public class GrievanceSubmissionManager : MonoBehaviour
             return;
         }
 
-        StartCoroutine(SendGrievanceToAPI(image, cvResult, snapshot, roadName, onSuccess, onFailure));
+        StartCoroutine(SendGrievanceToAPI(image, cvResult, snapshot, roadName, formattedAddress, onSuccess, onFailure));
     }
 
     private IEnumerator SendGrievanceToAPI(
@@ -71,6 +72,7 @@ public class GrievanceSubmissionManager : MonoBehaviour
         CVAnalysisResult cvResult,
         LocationServiceManager.LocationSnapshot snapshot,
         string roadName, 
+        string formattedAddress,
         System.Action<string> onSuccess, 
         System.Action<string> onFailure)
     {
@@ -99,7 +101,9 @@ public class GrievanceSubmissionManager : MonoBehaviour
         byte[] jpgBytes = image.EncodeToJPG(jpegQuality);
         string externalId = $"{externalIdPrefix}-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
         string startedAt = snapshot.timestamp.ToUniversalTime().ToString("o");
-        string category = !string.IsNullOrEmpty(cvResult?.defect_type) ? cvResult.defect_type : defaultCategory; //TODO change this to the new string agreed with SB
+        string category = !string.IsNullOrEmpty(cvResult?.defect_type) ? cvResult.defect_type : defaultCategory; //TODO change this to the new string agreed with S
+        string roadNameForPayload = string.IsNullOrEmpty(roadName) ? "UNKNOWN": roadName.Trim();
+        string formattedAddressForPayload = string.IsNullOrEmpty(formattedAddress) ? "UNKNOWN" : formattedAddress.Trim();
 
         WWWForm form = new WWWForm();
         form.AddField("external_id", externalId);
@@ -110,32 +114,16 @@ public class GrievanceSubmissionManager : MonoBehaviour
         form.AddField("latitude", snapshot.latitude.ToString("F6"));
         form.AddField("longitude", snapshot.longitude.ToString("F6"));
         form.AddField("accuracy", snapshot.horizontalAccuracy.ToString("F2"));
-        form.AddField("road_name", string.IsNullOrEmpty(roadName) ? "UNKNOWN" : roadName);
-
-        // if (!string.IsNullOrEmpty(cvResult?.defect_type))
-        // {
-        //     form.AddField("subcategory", cvResult.defect_type);
-        // }
-
-        // if (!string.IsNullOrEmpty(defaultDepartment))
-        // {
-        //     form.AddField("department", defaultDepartment);
-        // }
-
-        // if (!string.IsNullOrEmpty(defaultWard))
-        // {
-        //     form.AddField("ward", defaultWard);
-        // }
-
-        // if (!string.IsNullOrEmpty(defaultZone))
-        // {
-        //     form.AddField("zone", defaultZone);
-        // }
-
+        form.AddField("road_name", roadNameForPayload);
+        form.AddField("formatted_address", formattedAddressForPayload);
         form.AddBinaryData("image", jpgBytes, "complaint.jpg", "image/jpeg");
 
-        debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] Sending grievance POST...");
-
+         string payloadSummary =
+        $"external_id:{externalId} | category:{category} | started_at:{startedAt} | " +
+        $"lat:{snapshot.latitude:F6} lon:{snapshot.longitude:F6} acc:{snapshot.horizontalAccuracy:F2} | " +
+        $"road_name:{roadNameForPayload} | formatted_address:{formattedAddressForPayload} | image_bytes:{jpgBytes.Length}";
+        debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] Payload => {payloadSummary}");
+        
         //Step 3: Send multipart POST request
         using (UnityWebRequest request = UnityWebRequest.Post(grievanceApiUrl, form))
         {
@@ -170,9 +158,14 @@ public class GrievanceSubmissionManager : MonoBehaviour
             }
 
             //Step 5: Success
-            //No POCO parsing yet- treat any 200 as success until API contact is confirmed
-                debugOverlayController?.ShowGrievanceSubmitResult("[GrievanceSubmissionManager] Grievance submitted successfully.");
-            onSuccess?.Invoke(request.responseCode.ToString());
+            debugOverlayController?.ShowGrievanceSubmitResult(
+            $"[GrievanceSubmissionManager] Grievance submitted. HTTP {request.responseCode} | external_id:{externalId}");
+             if (!string.IsNullOrEmpty(responseBody))
+            {
+                debugOverlayController?.ShowGrievanceSubmitResult($"[GrievanceSubmissionManager] Response body: {responseBody}");
+            }
+
+             onSuccess?.Invoke(request.responseCode.ToString());
         }
     }
 

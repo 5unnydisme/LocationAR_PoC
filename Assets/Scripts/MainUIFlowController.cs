@@ -210,6 +210,18 @@ public class MainUIFlowController : MonoBehaviour
         Debug.Log($"[PanelManager] Test Mode: {testMode}");
     }
 
+    public void ToggleSyncedDebugOverlays()
+    {
+        bool debugVisible = debugOverlayController != null && debugOverlayController.IsDebugPanelVisible();
+        bool flowVisible = flowDebugOverlay != null && flowDebugOverlay.IsOverlayVisible();
+
+        //Rule: if either overlay is visible, hide both; if both are hidden, show both.
+        bool shouldShowBoth = !(debugVisible || flowVisible);
+
+        debugOverlayController?.SetDebugPanelVisible(shouldShowBoth);
+        flowDebugOverlay?.SetOverlayVisible(shouldShowBoth);
+    }
+
     private void SetupInitialUI()
     {
         HideAllPanels(); //Needed for hiding the logo panel 
@@ -720,16 +732,19 @@ public class MainUIFlowController : MonoBehaviour
 
         LocationServiceManager.LocationSnapshot snapshot;
         string roadName;
+        string formattedAddress;
 
         if (isMapsLocked)
         {
             snapshot = new LocationServiceManager.LocationSnapshot(26.515430f,80.235020f,5f); //Nursery GPS value
             roadName = string.IsNullOrEmpty(currentRoadName) ? testRoadName : currentRoadName;  
+            formattedAddress = roadName; //test-mode keeps this field non-empty
         }
         else
         {
             snapshot = locationServiceManager.LastLocationSnapshot;
             roadName = googleMapsServices.ActiveLocationName;
+            formattedAddress = googleMapsServices != null? googleMapsServices.ActiveFormattedAddress : null; 
         }
         SetReportFlowState(ReportFlowState.SubmittingGrievance);
         flowDebugOverlay?.MarkSubmitStarted();
@@ -739,6 +754,7 @@ public class MainUIFlowController : MonoBehaviour
             currentCVResult,
             snapshot,
             roadName,
+            formattedAddress,
             onSuccess: (string responseCode) =>
             {
                 flowDebugOverlay?.MarkSubmitSuccess(responseCode);
@@ -1216,7 +1232,7 @@ public class MainUIFlowController : MonoBehaviour
                 {
                     SetStatusMessage($"Unable to identify road name. Proceed to report issue for nearest known area: {locationResolutionNearestKnownAreaName}.");
                 }
-                //reportIssueButton.SetActive(true);
+                reportIssueButton.SetActive(true);
                 break;
 
             case LocationFailureType.ModerateAccuracyUnknownRoad:

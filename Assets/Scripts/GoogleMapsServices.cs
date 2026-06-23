@@ -26,11 +26,13 @@ public class GoogleMapsServices : MonoBehaviour
     private bool _hasLoggedSelectedResultForCurrentLookup; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
     private bool _currentCandidateUsedUnnamedRoadFallback;
     private string _currentCandidateNearestKnownAreaName;
+    private string _currentCandidateFormattedAddress; //To send to the POST request for additional info when roadname doesn't resolve
 
     //Stores the most recently resolved road name- readable by other scripts
     public string ActiveLocationName {get;private set;}="";
     public bool UsedUnnamedRoadFallback { get; private set; }
     public string UnnamedRoadFallbackAreaName { get; private set; } = "";
+    public string ActiveFormattedAddress {get; private set;}=""; 
 
     //API Response Data Classes, this is so that the JSON info that comes in from the API 
     // can be mapped onto specific C# classes, making them into objects that can be easily used in code 
@@ -80,8 +82,10 @@ public class GoogleMapsServices : MonoBehaviour
         _hasLoggedSelectedResultForCurrentLookup = false; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
         UsedUnnamedRoadFallback = false;
         UnnamedRoadFallbackAreaName = "";
+        ActiveFormattedAddress= "";
         _currentCandidateUsedUnnamedRoadFallback = false;
         _currentCandidateNearestKnownAreaName = null;
+        _currentCandidateFormattedAddress = null;
         debugOverlayController?.ResetPlacesCandidateDebug(); //Reset candidate debug info in the overlay at the start of a new lookup
         StartCoroutine(GetNearestRoadCoroutine(latitude, longitude, onComplete));
     }
@@ -144,6 +148,7 @@ public class GoogleMapsServices : MonoBehaviour
             string firstResolvedRoadName = null; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
             bool firstResolvedUsedUnnamedRoadFallback = false;
             string firstResolvedNearestKnownAreaName = null;
+            string firstResolvedFormattedAddress = null; 
 
             for (int i = 0; i < candidateCount; i++)
             {
@@ -169,6 +174,7 @@ public class GoogleMapsServices : MonoBehaviour
 
                 _currentCandidateUsedUnnamedRoadFallback = false;
                 _currentCandidateNearestKnownAreaName = null;
+                _currentCandidateFormattedAddress = null;
 
                 string resolvedRoadName = null;
                 bool hardFailure = false;
@@ -198,6 +204,7 @@ public class GoogleMapsServices : MonoBehaviour
                     firstResolvedRoadName = resolvedRoadName;
                     firstResolvedUsedUnnamedRoadFallback = _currentCandidateUsedUnnamedRoadFallback;
                     firstResolvedNearestKnownAreaName = _currentCandidateNearestKnownAreaName;
+                    firstResolvedFormattedAddress = _currentCandidateFormattedAddress;
                 }
             }
 
@@ -207,6 +214,9 @@ public class GoogleMapsServices : MonoBehaviour
                 UnnamedRoadFallbackAreaName = string.IsNullOrEmpty(firstResolvedNearestKnownAreaName)
                     ? ""
                     : firstResolvedNearestKnownAreaName;
+
+                ActiveFormattedAddress = string.IsNullOrEmpty(firstResolvedFormattedAddress)?""
+                : firstResolvedFormattedAddress;
                 ActiveLocationName = firstResolvedRoadName;
                 onComplete?.Invoke(ActiveLocationName);
                 yield break;
@@ -229,6 +239,7 @@ public class GoogleMapsServices : MonoBehaviour
     {
         _currentCandidateUsedUnnamedRoadFallback = false;
         _currentCandidateNearestKnownAreaName = null;
+        _currentCandidateFormattedAddress = null;
 
         //Build the Place Details request URL
         // Include route-capable data before fallback to plain place name.
@@ -277,6 +288,11 @@ public class GoogleMapsServices : MonoBehaviour
                 routeValueForDebug = ExtractRouteFromAddressComponents(response.result.address_components); // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
                 nameValueForDebug = response.result.name; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
                 formattedAddressForDebug = response.result.formatted_address; // DEBUG ONLY - REMOVE AFTER GPS INVESTIGATION
+
+                if (!string.IsNullOrEmpty(response.result.formatted_address))
+                {
+                    _currentCandidateFormattedAddress = response.result.formatted_address.Trim();
+                }
             }
 
             debugOverlayController?.ShowPlacesCandidateDebug(

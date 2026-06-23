@@ -22,6 +22,17 @@ public class FlowDebugOverlay : MonoBehaviour
         overlayRoot.SetActive(!overlayRoot.activeSelf);
     }
 
+    public bool IsOverlayVisible()
+    {
+        return overlayRoot != null && overlayRoot.activeSelf;
+    }
+
+    public void SetOverlayVisible(bool isVisible)
+    {
+        if (overlayRoot == null) return;
+        overlayRoot.SetActive(isVisible);
+    }
+
     public void ShowUIState(string state)
     {
         if (uiStateText == null) return;
