@@ -1,6 +1,6 @@
-# LocationAR_PoC
+# LocationAR_PoC: Unity Learning Project
 
-Unity-based civic infrastructure reporting proof of concept.
+**A functional prototype, not production-ready.** Built with a tech stack that fits my existing experience working with Unity.
 
 ## Hand-Off Summary
 
